@@ -44,7 +44,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' where'
         . ' person.co_id = :coId'
         . ' and not person.deleted'
+        . ' and person.co_person_id is null'
         . ' and not link.deleted'
+        . ' and link.co_org_identity_link_id is null'
+        . ' and not org.deleted'
+        . ' and org.org_identity_id is null'
+        . ' and not ident.deleted'
+        . ' and ident.identifier_id is null'
         . ' and ident.identifier = :coPersonOrgId';
 
     private $_loginIdQuery = 'select ident.identifier'
@@ -52,6 +58,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' where'
         . ' ident.co_person_id = :coPersonId'
         . ' and ident.type = :coPersonIdType'
+        . ' and not ident.deleted'
         . ' and ident.identifier_id is null';
 
     private $profileQuery = 'SELECT'
@@ -91,7 +98,10 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' INNER JOIN cm_certs AS cert'
         . ' ON org.id = cert.org_identity_id'
         . ' WHERE person.id = :coPersonId'
+        . ' AND NOT person.deleted'
+        . ' AND person.co_person_id IS NULL'
         . ' AND NOT link.deleted'
+        . ' AND link.co_org_identity_link_id IS NULL'
         . ' AND org.org_identity_id IS NULL'
         . ' AND NOT org.deleted'
         . ' AND cert.cert_id IS NULL'
@@ -105,6 +115,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' ON cou.id = role.cou_id'
         . ' WHERE'
         . ' role.co_person_id = :coPersonId'
+        . ' AND NOT cou.deleted'
+        . ' AND cou.cou_id IS NULL'
         . ' AND role.co_person_role_id IS NULL'
         . ' AND role.affiliation = \'member\''
         . ' AND role.status = \'A\''
