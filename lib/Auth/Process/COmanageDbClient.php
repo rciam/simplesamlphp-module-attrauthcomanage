@@ -3,7 +3,8 @@
 /**
  * COmanage authproc filter.
  *
- * This class is the authproc filter to get attributes from rest api
+ * This class is the authproc filter to get information about the user
+ * from the COmanage Registry database.
  *
  * Example configuration in the config/config.php
  *
@@ -16,6 +17,8 @@
  *       ),
  *
  * @author Nicolas Liampotis <nliam@grnet.gr>
+ * @author Nick Evangelou <nikosev@grnet.gr>
+ * @author Ioannis Igoumenos <ioigoume@grnet.gr>
  */
 class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_Auth_ProcessingFilter
 {
