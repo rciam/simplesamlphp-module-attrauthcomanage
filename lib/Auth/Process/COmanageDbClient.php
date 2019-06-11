@@ -480,16 +480,4 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         $t->show();
         exit();
     }
-
-    private function _targetCookie($cookieName, $payload) {
-		$params = array(
-			/* We save the cookies for 1 day. */
-			'lifetime' => (60*60*24*1),
-			'httponly' => FALSE,
-			'secure' => TRUE
-		);
-
-        \SimpleSAML\Utils\HTTP::setCookie($cookieName, $payload, $params, FALSE);
-        return 'ok';
-    }
 }
