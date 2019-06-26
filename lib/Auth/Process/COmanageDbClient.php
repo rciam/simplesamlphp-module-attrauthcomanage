@@ -64,6 +64,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' and not ident.deleted'
         . ' and ident.identifier_id is null';
 
+    // TODO: return single row
     private $profileQuery = 'SELECT'
         . ' name.given, name.family,'
         . ' mail.mail,'
@@ -81,11 +82,18 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' LEFT OUTER JOIN cm_identifiers ident'
         . ' ON person.id = ident.co_person_id'
         . ' WHERE'
-        . ' NOT name.deleted'
+        . ' NOT person.deleted'
+        . ' AND person.co_person_id IS NULL'
+        . ' AND NOT name.deleted'
         . ' AND name.name_id IS NULL'
+        . ' AND name.type = \'official\''
         . ' AND NOT mail.deleted'
         . ' AND mail.email_address_id IS NULL'
+        . ' AND mail.type = \'official\''
         . ' AND NOT link.deleted'
+        . ' AND link.co_org_identity_link_id is null'
+        . ' AND NOT org.deleted'
+        . ' AND org.org_identity_id is null'
         . ' AND NOT ident.deleted'
         . ' AND ident.type = \'uid\''
         . ' AND ident.identifier_id IS NULL'
@@ -127,6 +135,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' ORDER BY'
         . ' cou.name DESC';
 
+    // TODO: add co_id, group_type and status parameter
     private $groupQuery = 'SELECT'
         . ' DISTINCT (gr.name),'
         . ' gm.member,'
@@ -140,6 +149,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND NOT gm.deleted'
         . ' AND gr.co_group_id IS NULL'
         . ' AND NOT gr.deleted'
+        . ' AND gr.co_id = :coId'
         . ' ORDER BY'
         . ' gr.name DESC';
 
