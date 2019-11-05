@@ -64,11 +64,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' and not ident.deleted'
         . ' and ident.identifier_id is null';
 
-    // TODO: return single row
-    private $profileQuery = 'SELECT'
-        . ' name.given, name.family,'
+        private $profileQuery = 'SELECT'
+        . ' name.given,'
+        . ' name.family,'
         . ' mail.mail,'
-        . ' org.affiliation, org.o,'
+        . ' org.affiliation,'
+        . ' org.o,'
         . ' ident.identifier'
         . ' FROM cm_co_people person'
         . ' LEFT OUTER JOIN cm_names name'
@@ -97,7 +98,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND NOT ident.deleted'
         . ' AND ident.type = \'uid\''
         . ' AND ident.identifier_id IS NULL'
-        . ' AND person.id = :coPersonId';
+        . ' AND person.id = :coPersonId'
+        . ' AND name.type = \'official\''
+        . ' AND name.primary_name = true'
+        . ' AND link.co_org_identity_link_id IS NULL'
+        . ' AND NOT org.deleted'
+        . ' AND org.org_identity_id is NULL'
+        . ' ORDER BY link.org_identity_id ASC LIMIT 1';
 
     private $certQuery = 'SELECT'
         . ' cert.subject'
