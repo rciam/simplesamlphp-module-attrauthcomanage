@@ -156,6 +156,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND gr.co_group_id IS NULL'
         . ' AND NOT gr.deleted'
         . ' AND gr.co_id = :coId'
+        . ' AND group.group_type = \'S\''
+        . ' AND group.status = \'A\''
         . ' ORDER BY'
         . ' gr.name DESC';
 
@@ -301,9 +303,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             $groups = $this->getGroups($basicInfo['id']);
             foreach ($groups as $group) {
-                if (empty($group['name']) || substr($group['name'], 0, strlen('CO:')) === 'CO:') {
-                    continue;
-                }
                 $groupName = $group['name'];
                 $roles = array();
                 if ($group['member'] === true) {
