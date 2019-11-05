@@ -82,11 +82,5 @@ Note: In case you need to change the format of the entitlements you need to modi
         ),
 ```
 
-## Compatibility matrix
-This table matches the module version with the supported SimpleSAMLphp version.
-| Module |  SimpleSAMLphp |
-|:------:|:--------------:|
-| v1.0.0 | v1.14          |
-
 ## License
 Licensed under the Apache 2.0 license, for details see `LICENSE`.
