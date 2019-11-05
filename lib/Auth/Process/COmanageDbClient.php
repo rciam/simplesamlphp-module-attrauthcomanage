@@ -107,7 +107,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' ORDER BY link.org_identity_id ASC LIMIT 1';
 
     private $certQuery = 'SELECT'
-        . ' cert.subject'
+        . ' DISTINCT(cert.subject)'
         . ' FROM cm_co_people AS person'
         . ' INNER JOIN cm_co_org_identity_links AS link'
         . ' ON person.id = link.co_person_id'
