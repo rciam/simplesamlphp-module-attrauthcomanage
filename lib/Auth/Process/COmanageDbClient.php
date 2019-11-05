@@ -127,7 +127,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     private $couQuery = 'SELECT'
         . ' DISTINCT (cou.name),'
-        . ' title'
         . ' FROM cm_cous AS cou'
         . ' INNER JOIN cm_co_person_roles AS role'
         . ' ON cou.id = role.cou_id'
