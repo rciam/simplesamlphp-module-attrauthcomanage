@@ -4,8 +4,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v1.0.0] - 2019-11-25
-
 This version is compatible with [SimpleSAMLphp v1.14](https://simplesamlphp.org/docs/1.14/simplesamlphp-changelog)
 
 ### Added
@@ -18,3 +16,13 @@ This version is compatible with [SimpleSAMLphp v1.14](https://simplesamlphp.org/
   - Create eduPersonEntilement values based on:
     - roles attributes (COU membership)
     - groups (group member role)
+  - Store the session into `target_new` query parameter. Use the stored seesion for the purpose of redirecting the user to the SP at the end of Registry enrollment.
+
+### Changed
+- Moved placeholder variables to configuration
+  - urnNamespace
+  - fqdn
+  - COmanage registry redirect URLs
+
+### Fixed
+- sql query failure due to typo error

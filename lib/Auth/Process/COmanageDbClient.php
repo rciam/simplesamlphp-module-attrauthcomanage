@@ -14,6 +14,21 @@
  *            'class' => 'attrauthcomanage:COmanageDbClient',
  *            'coId' => 2,
  *            'userIdAttribute' => 'eduPersonUniqueId',
+ *            'voWhitelist' => array(
+ *               'vo.example.com',
+ *               'vo.example2.com',
+ *            ),
+ *            'communityIdps' => array(
+ *               'https://example1.com/idp',
+ *            ),
+ *            'urnNamespace' => 'urn:mace:example.eu',
+ *            'fqdn'         => 'example.eu',
+ *            'registryUrls' => array(
+ *               'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1',
+ *               'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2',
+ *               'community_sign_up' => 'https://example.com/registry/co_petitions/start/coef:3',
+ *               'registry_login'    => 'https://example.com/registry/co_petitions/auth/login',
+ *            ),
  *       ),
  *
  * @author Nicolas Liampotis <nliam@grnet.gr>
@@ -23,20 +38,32 @@
 class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_Auth_ProcessingFilter
 {
     // List of SP entity IDs that should be excluded from this filter.
-    private $_blacklist = array();
-    
-    private $_coId;
+    private $blacklist = array();
+    // List of allowed types of registry urls
+    private $registryUrlTypesAllowed = array(
+      'self_sign_up',
+      'sign_up',
+      'community_sign_up',
+      'registry_login');
+
+    private $coId;
 
     private $coUserIdType = 'epuid';
 
-    private $_userIdAttribute = 'eduPersonUniqueId';
+    private $userIdAttribute = 'eduPersonUniqueId';
 
     // List of VO names that should be included in entitlements.
     private $voWhitelist = array();
 
+    private $urnNamespace = null;
+    private $fqdn = null;
+    private $registryUrls = array();
+    private $communityIdps = array();
+
     private $_basicInfoQuery = 'select'
         . ' person.id,'
-        . ' person.status'
+        . ' person.status,'
+        . ' person.co_id'
         . ' from cm_co_people person'
         . ' inner join cm_co_org_identity_links link'
         . ' on person.id = link.co_person_id'
@@ -126,7 +153,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND NOT cert.deleted';
 
     private $couQuery = 'SELECT'
-        . ' DISTINCT (cou.name),'
+        . ' DISTINCT (cou.name)'
         . ' FROM cm_cous AS cou'
         . ' INNER JOIN cm_co_person_roles AS role'
         . ' ON cou.id = role.cou_id'
@@ -141,7 +168,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' ORDER BY'
         . ' cou.name DESC';
 
-    // TODO: add co_id, group_type and status parameter
     private $groupQuery = 'SELECT'
         . ' DISTINCT (gr.name),'
         . ' gm.member,'
@@ -156,8 +182,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND gr.co_group_id IS NULL'
         . ' AND NOT gr.deleted'
         . ' AND gr.co_id = :coId'
-        . ' AND group.group_type = \'S\''
-        . ' AND group.status = \'A\''
+        . ' AND gr.group_type = \'S\''
+        . ' AND gr.status = \'A\''
         . ' ORDER BY'
         . ' gr.name DESC';
 
@@ -178,6 +204,44 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
         $this->_coId = $config['coId']; 
 
+        // urnNamespace config
+        if (!array_key_exists('urnNamespace', $config) && !is_string($config['urnNamespace'])) {
+          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnNamespace' not specified or wrong format(string required)");
+          throw new SimpleSAML_Error_Exception(
+            "attrauthcomanage configuration error: 'urnNamespace' not specified");
+        }
+        $this->urnNamespace = $config['urnNamespace'];
+
+        // fqdn config
+        if (!array_key_exists('fqdn', $config) && !is_string($config['fqdn'])) {
+          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'fqdn' not specified or wrong format(string required)");
+          throw new SimpleSAML_Error_Exception(
+            "attrauthcomanage configuration error: 'fqdn' not specified");
+        }
+        $this->fqdn = $config['fqdn'];
+
+        // Redirect Urls config
+        if (!array_key_exists('registryUrls', $config)) {
+          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' not specified");
+          throw new SimpleSAML_Error_Exception(
+            "attrauthcomanage configuration error: 'registryUrls' not specified");
+        } else {
+          // Check if the keys exist
+          $allowed = $this->registryUrlTypesAllowed;
+          $invalid_keys = array_filter($config['registryUrls'], function($key) use ($allowed) {
+            return !in_array($key, $allowed);
+          }, ARRAY_FILTER_USE_KEY);
+          $invalid_urls = array_filter($config['registryUrls'], function($value) {
+            return !filter_var($value, FILTER_VALIDATE_URL);
+          });
+          if (!empty($invalid_keys) || !empty($invalid_urls)) {
+            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' url or key configuration error");
+            throw new SimpleSAML_Error_Exception(
+              "attrauthcomanage configuration error: 'registryUrls' url or key configuration error");
+          }
+        }
+        $this->registryUrls = $config['registryUrls'];
+
         if (array_key_exists('coUserIdType', $config)) {
             if (!is_string($config['coUserIdType'])) {
                 SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coUserIdType' not a string literal");
@@ -193,7 +257,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 throw new SimpleSAML_Error_Exception(
                     "attrauthcomanage configuration error: 'userIdAttribute' not a string literal");
             }
-            $this->_userIdAttribute = $config['userIdAttribute'];
+            $this->userIdAttribute = $config['userIdAttribute'];
         }
 
         if (array_key_exists('blacklist', $config)) {
@@ -202,7 +266,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 throw new SimpleSAML_Error_Exception(
                     "attrauthcomanage configuration error: 'blacklist' not an array");
             }
-            $this->_blacklist = $config['blacklist']; 
+            $this->blacklist = $config['blacklist'];
         }
         if (array_key_exists('voWhitelist', $config)) {
             if (!is_array($config['voWhitelist'])) {
@@ -212,30 +276,47 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             $this->voWhitelist = $config['voWhitelist']; 
         }
+        if (array_key_exists('communityIdps', $config)) {
+            if (!is_array($config['communityIdps'])) {
+                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'communityIdps' not an array");
+                throw new SimpleSAML_Error_Exception(
+                    "attrauthcomanage configuration error: 'communityIdps' not an array");
+            }
+            $this->communityIdps = $config['communityIdps'];
+        }
     }
 
     public function process(&$state)
     {
         try {
             assert('is_array($state)');
-            if (isset($state['SPMetadata']['entityid']) && in_array($state['SPMetadata']['entityid'], $this->_blacklist, true)) {
+            if (isset($state['SPMetadata']['entityid']) && in_array($state['SPMetadata']['entityid'], $this->blacklist, true)) {
                 SimpleSAML_Logger::debug("[attrauthcomanage] process: Skipping blacklisted SP ". var_export($state['SPMetadata']['entityid'], true));
                 return;
             }
-            if (empty($state['Attributes'][$this->_userIdAttribute])) {
+            if (empty($state['Attributes'][$this->userIdAttribute])) {
                 //echo '<pre>' . var_export($state, true) . '</pre>';
                 SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not available");
                 throw new SimpleSAML_Error_Exception(
                     "attrauthcomanage configuration error: 'userIdAttribute' not available");
             }
             unset($state['Attributes']['uid']);
-            $orgId = $state['Attributes'][$this->_userIdAttribute][0];
+            $orgId = $state['Attributes'][$this->userIdAttribute][0];
             SimpleSAML_Logger::debug("[attrauthcomanage] process: orgId=". var_export($orgId, true));
             $basicInfo = $this->_getBasicInfo($orgId);
             SimpleSAML_Logger::debug("[attrauthcomanage] process: basicInfo=". var_export($basicInfo, true));
             if (empty($basicInfo['id']) || empty($basicInfo['status']) 
                 || ($basicInfo['status'] !== 'A' && $basicInfo['status'] !== 'GP')) {
-                $this->_redirect($basicInfo, $state['Attributes']);
+                  $state['UserID'] = $orgId;
+                  $params = array();
+                  $id = SimpleSAML_Auth_State::saveState($state, 'attrauthcomanage:register');
+                  $callback = SimpleSAML_Module::getModuleURL('attrauthcomanage/idp_callback.php', array('stateId' => $id));
+                  SimpleSAML_Logger::debug("[attrauthcomanage] process: callback url => " . $callback);
+                  $params = array("targetnew" => $callback);
+                  if (!empty($state['saml:AuthenticatingAuthority']) && in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)) {
+                    \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
+                  }
+                  $this->_redirect($basicInfo, $state, $params);
             }
             $loginId = $this->_getLoginId($basicInfo['id']);
             SimpleSAML_Logger::debug("[attrauthcomanage] process: loginId=". var_export($loginId, true));
@@ -243,7 +324,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 // Normally, this should not happen
                 throw new Exception('There is a problem with your account. Please contact support for further assistance.');
             }
-            $state['Attributes'][$this->_userIdAttribute] = array($loginId);
+            $state['Attributes'][$this->userIdAttribute] = array($loginId);
             $state['UserID'] = $loginId;
             $profile = $this->getProfile($basicInfo['id']);
             if (empty($profile)) {
@@ -289,19 +370,22 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     continue;
                 }
                 $voName = $cou['name'];
+                // TODO: make roles configurable
                 $roles = array("member", "vm_operator");
                 if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
                     $state['Attributes']['eduPersonEntitlement'] = array();
                 }
                 foreach ($roles as $role) {
                     $state['Attributes']['eduPersonEntitlement'][] =
-                        "urn:mace:example.org:group:"   // URN namespace
+                        $this->urnNamespace        // create $urn_namespace
+                        . ":group:"                // URN namespace
                         . urlencode($voName)       // VO
                         . ":role=".$role           // role
-                        . "#example.org";           // AA FQDN
+                        . "#" . $this->fqdn;       // AA FQDN, create $fqdn
                 }
             }
-            $groups = $this->getGroups($basicInfo['id']);
+
+            $groups = $this->getGroups($basicInfo['id'], $this->coId);
             foreach ($groups as $group) {
                 $groupName = $group['name'];
                 $roles = array();
@@ -314,12 +398,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
                     $state['Attributes']['eduPersonEntitlement'] = array();
                 }
-                foreach ($roles as $role) {                        
+                foreach ($roles as $role) {
                     $state['Attributes']['eduPersonEntitlement'][] =
-                        "urn:mace:example.org:group:registry:"   // URN namespace
-                        . urlencode($groupName)       // VO
-                        . ":role=".$role           // role
-                        . "#example.org";           // AA FQDN
+                        $this->urnNamespace       // URN namespace
+                        . ":group:registry:"      // URN namespace
+                        . urlencode($groupName)   // VO
+                        . ":role=".$role          // role
+                        . "#" . $this->fqdn;      // AA FQDN
                 }
             }
         } catch (\Exception $e) {
@@ -327,16 +412,17 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
     }
 
-    private function _redirect($basicInfo, &$attributes)
+    private function _redirect($basicInfo, &$state, $params = array())
     {
+        $attributes = $state['Attributes'];
         SimpleSAML_Logger::debug("[attrauthcomanage] _redirect: attributes="
             . var_export($attributes, true));
         // Check Pending Confirmation (PC) / Pending Approval (PA) status
         // TODO: How to deal with 'Expired' accounts?
         if (!empty($basicInfo) && ($basicInfo['status'] === 'PC' || $basicInfo['status'] === 'PA')) {
-            \SimpleSAML\Utils\HTTP::redirectTrustedURL('https://example.org/registry/auth/login');
+            \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['registry_login']);
         }
-        \SimpleSAML\Utils\HTTP::redirectTrustedURL('https://example.org/registry/co_petitions/start/coef:2');
+        \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['sign_up'], $params);
     }
 
     private function _getBasicInfo($orgId)
@@ -346,7 +432,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
         $db = SimpleSAML\Database::getInstance();
         $queryParams = array(
-            'coId' => array($this->_coId, PDO::PARAM_INT),
+            'coId' => array($this->coId, PDO::PARAM_INT),
             'coPersonOrgId' => array($orgId, PDO::PARAM_STR),
         );
         $stmt = $db->read($this->_basicInfoQuery, $queryParams);
@@ -462,15 +548,18 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         return $result;
     }
 
-    private function getGroups($personId)
+    private function getGroups($personId, $coId)
     {
         SimpleSAML_Logger::debug("[attrauthcomanage] getGroups: personId="
             . var_export($personId, true));
+        SimpleSAML_Logger::debug("[attrauthcomanage] getGroups: coId="
+          . var_export($coId, true));
 
         $result = array();
         $db = SimpleSAML\Database::getInstance();
         $queryParams = array(
             'coPersonId' => array($personId, PDO::PARAM_INT),
+            'coId' => array($coId, PDO::PARAM_INT),
         );
         $stmt = $db->read($this->groupQuery, $queryParams);
         if ($stmt->execute()) {

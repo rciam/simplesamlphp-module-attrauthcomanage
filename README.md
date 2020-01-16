@@ -62,6 +62,11 @@ The following authproc filter configuration options are supported:
   * `userIdAttribute`: Optional, a string containing the name of the attribute whose value to use for querying the COmanage Registry. Defaults to `"eduPersonPrincipalName"`.
   * `blacklist`: Optional, an array of strings that contains the SPs that the module will skip to process.
   * `voWhitelist`: Optional, an array of strings that contains roles (COUs) that the module will generate entitlements.
+  * `communityIdps`: Optional, an array of strings that contains the Entity Ids of trusted communities.
+  * `urnNamespace`: Required, A string to use as the URN namespace of the generated `eduPersonEntitlement` values containing CO group membership information. Defauls to `"urn:mace:example.org"`.
+  * `fqdn`: Required, A string to use as a Fully Qualified Domain Name in the the entitlements
+  * `registryUrls`: Required, an array of COmanage endpoints representing standard Enrollment Flow types. All the four endpoints are mandatory.
+  
 Note: In case you need to change the format of the entitlements you need to modify the source code.
 
 ### Example authproc filter configuration
@@ -78,6 +83,17 @@ Note: In case you need to change the format of the entitlements you need to modi
             ),
             'voWhitelist' => array(
                 'vo.example.org',
+            ),
+            'communityIdps' => array(
+               'https://example1.com/idp',
+            ),
+            'urnNamespace' => 'urn:mace:example.org',
+            'fqdn'         => 'example.eu',
+            'registryUrls' => array(
+               'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1', // Required
+               'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2', // Required
+               'community_sign_up' => 'https://example.com/registry/co_petitions/start/coef:3', // Required
+               'registry_login'    => 'https://example.com/registry/co_petitions/auth/login',   // Required
             ),
         ),
 ```
