@@ -3,7 +3,7 @@ A SimpleSAMLphp module for retrieving attributes from [COmanage Registry](https:
 
 In a nuthshell, this module provides a set of SimpleSAMLphp authentication processing filters allowing to use COmanage Registry as an Attribute Authority. Specifically, the module supports retrieving the following user information from COmanage:
   * CO person profile information, including login identifiers
-  * CO group membership information, which is encapsulated in `eduPersonEntitlement` attribute values
+  * CO group membership information, which is encapsulated in `eduPersonEntitlement` attribute values following the [AARC-G002](https://aarc-community.org/guidelines/aarc-g002/) specification
 
 To this end, the above information can be retrieved through the COmanage Registry REST API. Support for directly querying the COmanage Registry DB is also foreseen.
 
@@ -66,6 +66,7 @@ The following authproc filter configuration options are supported:
   * `urnNamespace`: Required, a string to use as the URN namespace of the generated `eduPersonEntitlement` values containing group membership and role information.
   * `urnAuthority`: Required, a string to use as the authority of the generated `eduPersonEntitlement` URN values containing group membership and role information.
   * `registryUrls`: Required, an array of COmanage endpoints representing standard Enrollment Flow types. All the four endpoints are mandatory.
+  * `urnLegacy`: Optional, a boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
   
 Note: In case you need to change the format of the entitlements you need to modify the source code.
 

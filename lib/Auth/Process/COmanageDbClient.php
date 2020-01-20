@@ -60,6 +60,10 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $registryUrls = array();
     private $communityIdps = array();
 
+    // If true, this filter will also generate entitlements using the
+    // legacy URN format
+    private $urnLegacy = false;
+
     private $_basicInfoQuery = 'select'
         . ' person.id,'
         . ' person.status,'
@@ -284,6 +288,15 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             $this->communityIdps = $config['communityIdps'];
         }
+
+        if (array_key_exists('urnLegacy', $config)) {
+            if (!is_bool($config['urnLegacy'])) {
+                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnLegacy' not a boolean");
+                throw new SimpleSAML_Error_Exception(
+                    "attrauthcomanage configuration error: 'urnLegacy' not a boolean");
+            }
+            $this->urnLegacy = $config['urnLegacy'];
+        }
     }
 
     public function process(&$state)
@@ -382,6 +395,15 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                         . urlencode($voName)         // VO
                         . ":role=".$role             // role
                         . "#" . $this->urnAuthority; // AA FQDN
+                    // Enable legacy URN syntax for compatibility reasons?
+                    if ($this->urnLegacy) {
+                        $state['Attributes']['eduPersonEntitlement'][] =
+                            $this->urnNamespace          // URN namespace
+                            . ':' . $this->urnAuthority; // AA FQDN
+                            . ':' . $role                // role
+                            . "@"                        // VO delimiter
+                            . urlencode($voName);        // VO
+                    }
                 }
             }
 
@@ -405,6 +427,15 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                         . urlencode($groupName)      // VO
                         . ":role=".$role             // role
                         . "#" . $this->urnAuthority; // AA FQDN
+                    // Enable legacy URN syntax for compatibility reasons?
+                    if ($this->urnLegacy) {
+                        $state['Attributes']['eduPersonEntitlement'][] =
+                            $this->urnNamespace          // URN namespace
+                            . ':' . $this->urnAuthority; // AA FQDN
+                            . ':' . $role                // role
+                            . "@"                        // VO delimiter
+                            . urlencode($voName);        // VO
+                    }
                 }
             }
         } catch (\Exception $e) {
