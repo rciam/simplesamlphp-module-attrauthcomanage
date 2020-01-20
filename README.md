@@ -61,10 +61,10 @@ The following authproc filter configuration options are supported:
   * `coUserIdType`: Optional, a string that indicates the type of the identifier that the users have. Defaults to `epuid`.
   * `userIdAttribute`: Optional, a string containing the name of the attribute whose value to use for querying the COmanage Registry. Defaults to `"eduPersonPrincipalName"`.
   * `blacklist`: Optional, an array of strings that contains the SPs that the module will skip to process.
-  * `voWhitelist`: Optional, an array of strings that contains roles (COUs) that the module will generate entitlements.
+  * `voWhitelist`: Optional, an array of strings that contains VOs (COUs) for which the module will generate entitlements.
   * `communityIdps`: Optional, an array of strings that contains the Entity Ids of trusted communities.
-  * `urnNamespace`: Required, A string to use as the URN namespace of the generated `eduPersonEntitlement` values containing CO group membership information. Defauls to `"urn:mace:example.org"`.
-  * `fqdn`: Required, A string to use as a Fully Qualified Domain Name in the the entitlements
+  * `urnNamespace`: Required, a string to use as the URN namespace of the generated `eduPersonEntitlement` values containing group membership and role information.
+  * `urnAuthority`: Required, a string to use as the authority of the generated `eduPersonEntitlement` URN values containing group membership and role information.
   * `registryUrls`: Required, an array of COmanage endpoints representing standard Enrollment Flow types. All the four endpoints are mandatory.
   
 Note: In case you need to change the format of the entitlements you need to modify the source code.
@@ -88,7 +88,7 @@ Note: In case you need to change the format of the entitlements you need to modi
                'https://example1.com/idp',
             ),
             'urnNamespace' => 'urn:mace:example.org',
-            'fqdn'         => 'example.eu',
+            'urnAuthority' => 'example.eu',
             'registryUrls' => array(
                'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1', // Required
                'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2', // Required
