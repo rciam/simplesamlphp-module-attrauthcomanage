@@ -22,7 +22,7 @@
  *               'https://example1.com/idp',
  *            ),
  *            'urnNamespace' => 'urn:mace:example.eu',
- *            'fqdn'         => 'example.eu',
+ *            'urnAuthority'         => 'example.eu',
  *            'registryUrls' => array(
  *               'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1',
  *               'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2',
@@ -56,9 +56,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $voWhitelist = array();
 
     private $urnNamespace = null;
-    private $fqdn = null;
+    private $urnAuthority = null;
     private $registryUrls = array();
     private $communityIdps = array();
+
+    // If true, this filter will also generate entitlements using the
+    // legacy URN format
+    private $urnLegacy = false;
 
     private $_basicInfoQuery = 'select'
         . ' person.id,'
@@ -212,13 +216,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
         $this->urnNamespace = $config['urnNamespace'];
 
-        // fqdn config
-        if (!array_key_exists('fqdn', $config) && !is_string($config['fqdn'])) {
-          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'fqdn' not specified or wrong format(string required)");
+        // urnAuthority config
+        if (!array_key_exists('urnAuthority', $config) && !is_string($config['urnAuthority'])) {
+          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnAuthority' not specified or wrong format(string required)");
           throw new SimpleSAML_Error_Exception(
-            "attrauthcomanage configuration error: 'fqdn' not specified");
+            "attrauthcomanage configuration error: 'urnAuthority' not specified");
         }
-        $this->fqdn = $config['fqdn'];
+        $this->urnAuthority = $config['urnAuthority'];
 
         // Redirect Urls config
         if (!array_key_exists('registryUrls', $config)) {
@@ -283,6 +287,15 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     "attrauthcomanage configuration error: 'communityIdps' not an array");
             }
             $this->communityIdps = $config['communityIdps'];
+        }
+
+        if (array_key_exists('urnLegacy', $config)) {
+            if (!is_bool($config['urnLegacy'])) {
+                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnLegacy' not a boolean");
+                throw new SimpleSAML_Error_Exception(
+                    "attrauthcomanage configuration error: 'urnLegacy' not a boolean");
+            }
+            $this->urnLegacy = $config['urnLegacy'];
         }
     }
 
@@ -377,11 +390,20 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 }
                 foreach ($roles as $role) {
                     $state['Attributes']['eduPersonEntitlement'][] =
-                        $this->urnNamespace        // create $urn_namespace
-                        . ":group:"                // URN namespace
-                        . urlencode($voName)       // VO
-                        . ":role=".$role           // role
-                        . "#" . $this->fqdn;       // AA FQDN, create $fqdn
+                        $this->urnNamespace          // URN namespace
+                        . ":group:"                  // group literal
+                        . urlencode($voName)         // VO
+                        . ":role=".$role             // role
+                        . "#" . $this->urnAuthority; // AA FQDN
+                    // Enable legacy URN syntax for compatibility reasons?
+                    if ($this->urnLegacy) {
+                        $state['Attributes']['eduPersonEntitlement'][] =
+                            $this->urnNamespace          // URN namespace
+                            . ':' . $this->urnAuthority; // AA FQDN
+                            . ':' . $role                // role
+                            . "@"                        // VO delimiter
+                            . urlencode($voName);        // VO
+                    }
                 }
             }
 
@@ -400,11 +422,20 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 }
                 foreach ($roles as $role) {
                     $state['Attributes']['eduPersonEntitlement'][] =
-                        $this->urnNamespace       // URN namespace
-                        . ":group:registry:"      // URN namespace
-                        . urlencode($groupName)   // VO
-                        . ":role=".$role          // role
-                        . "#" . $this->fqdn;      // AA FQDN
+                        $this->urnNamespace          // URN namespace
+                        . ":group:registry:"         // URN namespace
+                        . urlencode($groupName)      // VO
+                        . ":role=".$role             // role
+                        . "#" . $this->urnAuthority; // AA FQDN
+                    // Enable legacy URN syntax for compatibility reasons?
+                    if ($this->urnLegacy) {
+                        $state['Attributes']['eduPersonEntitlement'][] =
+                            $this->urnNamespace          // URN namespace
+                            . ':' . $this->urnAuthority; // AA FQDN
+                            . ':' . $role                // role
+                            . "@"                        // VO delimiter
+                            . urlencode($voName);        // VO
+                    }
                 }
             }
         } catch (\Exception $e) {
