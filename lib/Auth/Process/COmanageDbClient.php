@@ -206,7 +206,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             throw new SimpleSAML_Error_Exception(
                 "attrauthcomanage configuration error: 'coId' not an integer number");
         }
-        $this->_coId = $config['coId']; 
+        $this->coId = $config['coId'];
 
         // urnNamespace config
         if (!array_key_exists('urnNamespace', $config) && !is_string($config['urnNamespace'])) {
@@ -399,7 +399,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     if ($this->urnLegacy) {
                         $state['Attributes']['eduPersonEntitlement'][] =
                             $this->urnNamespace          // URN namespace
-                            . ':' . $this->urnAuthority; // AA FQDN
+                            . ':' . $this->urnAuthority  // AA FQDN
                             . ':' . $role                // role
                             . "@"                        // VO delimiter
                             . urlencode($voName);        // VO
@@ -431,7 +431,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     if ($this->urnLegacy) {
                         $state['Attributes']['eduPersonEntitlement'][] =
                             $this->urnNamespace          // URN namespace
-                            . ':' . $this->urnAuthority; // AA FQDN
+                            . ':' . $this->urnAuthority  // AA FQDN
                             . ':' . $role                // role
                             . "@"                        // VO delimiter
                             . urlencode($voName);        // VO
