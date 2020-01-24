@@ -25,6 +25,7 @@ This version is compatible with [SimpleSAMLphp v1.14](https://simplesamlphp.org/
   - urnNamespace
   - urnAuthority
   - COmanage registry redirect URLs
+  - voRoles
 
 ### Fixed
 - sql query failure due to typo error
