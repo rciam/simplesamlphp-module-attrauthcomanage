@@ -21,6 +21,10 @@
  *            'communityIdps' => array(
  *               'https://example1.com/idp',
  *            ),
+ *            'voRoles' => array(
+ *               'member',
+ *               'faculty',
+ *            ),
  *            'urnNamespace' => 'urn:mace:example.eu',
  *            'urnAuthority'         => 'example.eu',
  *            'registryUrls' => array(
@@ -216,6 +220,14 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
         $this->urnNamespace = $config['urnNamespace'];
 
+      // voRoles config
+      if (!array_key_exists('voRoles', $config) && !is_string($config['voRoles'])) {
+        SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(string required)");
+        throw new SimpleSAML_Error_Exception(
+          "attrauthcomanage configuration error: 'voRoles' not specified");
+      }
+      $this->voRoles = $config['voRoles'];
+
         // urnAuthority config
         if (!array_key_exists('urnAuthority', $config) && !is_string($config['urnAuthority'])) {
           SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnAuthority' not specified or wrong format(string required)");
@@ -383,12 +395,10 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     continue;
                 }
                 $voName = $cou['name'];
-                // TODO: make roles configurable
-                $roles = array("member", "vm_operator");
                 if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
                     $state['Attributes']['eduPersonEntitlement'] = array();
                 }
-                foreach ($roles as $role) {
+                foreach ($this->voRoles as $role) {
                     $state['Attributes']['eduPersonEntitlement'][] =
                         $this->urnNamespace          // URN namespace
                         . ":group:"                  // group literal
@@ -452,6 +462,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         // TODO: How to deal with 'Expired' accounts?
         if (!empty($basicInfo) && ($basicInfo['status'] === 'PC' || $basicInfo['status'] === 'PA')) {
             \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['registry_login']);
+        }
+        if (!empty($attributes['eduPersonScopedAffiliation'])
+            && !empty($attributes['mail'])
+            && !empty($attributes['givenName'])
+            && !empty($attributes['sn'])) {
+            \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['self_sign_up']);
         }
         \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['sign_up'], $params);
     }
