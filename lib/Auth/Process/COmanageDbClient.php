@@ -161,20 +161,21 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND NOT cert.deleted';
 
     private $couQuery = 'SELECT'
-        . ' DISTINCT (cou.name)'
-        . ' FROM cm_cous AS cou'
-        . ' INNER JOIN cm_co_person_roles AS role'
-        . ' ON cou.id = role.cou_id'
-        . ' WHERE'
-        . ' role.co_person_id = :coPersonId'
-        . ' AND NOT cou.deleted'
-        . ' AND cou.cou_id IS NULL'
-        . ' AND role.co_person_role_id IS NULL'
-        . ' AND role.affiliation = \'member\''
-        . ' AND role.status = \'A\''
-        . ' AND NOT role.deleted'
-        . ' ORDER BY'
-        . ' cou.name DESC';
+    . ' cou.name as name,'
+    . ' string_agg(role.title, \',\') as title,'
+    . ' string_agg(role.affiliation, \',\') as affiliation'
+    . ' FROM cm_cous AS cou'
+    . ' INNER JOIN cm_co_person_roles AS role'
+    . ' ON cou.id = role.cou_id'
+    . ' WHERE'
+    . ' role.co_person_id = :coPersonId'
+    . ' AND NOT cou.deleted'
+    . ' AND cou.cou_id IS NULL'
+    . ' AND role.co_person_role_id IS NULL'
+    . ' AND role.status = \'A\''
+    . ' AND NOT role.deleted'
+    . ' GROUP BY name'
+    . ' ORDER BY name DESC';
 
     private $groupQuery = 'SELECT'
         . ' DISTINCT (gr.name),'
@@ -397,6 +398,23 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 $voName = $cou['name'];
                 if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
                     $state['Attributes']['eduPersonEntitlement'] = array();
+                }
+                // Assemble the roles
+                // If there is nothing to assemble then keep the default ones
+                if (!empty($cou['title']) || !empty($cou['affiliation'])) {
+                  $cou['title'] = !empty($cou['title']) ? $cou['title'] : "";
+                  $cou['affiliation'] = !empty($cou['affiliation']) ? $cou['affiliation'] : "";
+                  // Explode both
+                  $cou_titles = explode(',', $cou['title']);
+                  $cou_affiliations = explode(',', $cou['affiliation']);
+                  $vo_roles = array_unique(array_merge($cou_titles, $cou_affiliations));
+                  $vo_roles = array_filter($vo_roles, function ($value) {
+                    return !empty($value);
+                  });
+                  // Lowercase all roles
+                  $vo_roles = array_map('strtolower', $vo_roles);
+                  // Merge the default roles with the ones constructed from the COUs
+                  $this->voRoles = array_unique(array_merge($vo_roles, $this->voRoles));
                 }
                 foreach ($this->voRoles as $role) {
                     $state['Attributes']['eduPersonEntitlement'][] =
