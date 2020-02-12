@@ -21,6 +21,10 @@
  *            'communityIdps' => array(
  *               'https://example1.com/idp',
  *            ),
+ *            'voRoles' => array(
+ *               'member',
+ *               'faculty',
+ *            ),
  *            'urnNamespace' => 'urn:mace:example.eu',
  *            'urnAuthority'         => 'example.eu',
  *            'registryUrls' => array(
@@ -156,21 +160,29 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND cert.cert_id IS NULL'
         . ' AND NOT cert.deleted';
 
-    private $couQuery = 'SELECT'
-        . ' DISTINCT (cou.name)'
+      private $couQuery = 'SELECT'
+        . ' cou.name AS cou_name,'
+        . ' string_agg(DISTINCT role.title, \',\') AS title,'
+        . ' string_agg(DISTINCT role.affiliation, \',\') AS affiliation,'
+        . ' string_agg(DISTINCT cast(members.member AS text), \',\') AS member,'
+        . ' string_agg(DISTINCT cast(members.owner AS text), \',\') AS owner'
         . ' FROM cm_cous AS cou'
-        . ' INNER JOIN cm_co_person_roles AS role'
-        . ' ON cou.id = role.cou_id'
-        . ' WHERE'
-        . ' role.co_person_id = :coPersonId'
-        . ' AND NOT cou.deleted'
-        . ' AND cou.cou_id IS NULL'
+        . ' INNER JOIN cm_co_person_roles AS ROLE ON cou.id = role.cou_id'
         . ' AND role.co_person_role_id IS NULL'
-        . ' AND role.affiliation = \'member\''
         . ' AND role.status = \'A\''
         . ' AND NOT role.deleted'
-        . ' ORDER BY'
-        . ' cou.name DESC';
+        . ' AND role.co_person_id = :coPersonId'
+        . ' AND NOT cou.deleted'
+        . ' INNER JOIN cm_co_groups AS groups ON groups.cou_id = cou.id'
+        . ' AND groups.group_type = \'A\''
+        . ' AND NOT groups.deleted'
+        . ' AND groups.co_group_id IS NULL'
+        . ' LEFT OUTER JOIN cm_co_group_members AS members ON members.co_group_id = groups.id'
+        . ' AND members.co_person_id = role.co_person_id'
+        . ' AND NOT members.deleted'
+        . ' AND members.co_group_member_id IS NULL'
+        . ' GROUP BY cou_name'
+        . ' ORDER BY cou_name DESC';
 
     private $groupQuery = 'SELECT'
         . ' DISTINCT (gr.name),'
@@ -215,6 +227,14 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             "attrauthcomanage configuration error: 'urnNamespace' not specified");
         }
         $this->urnNamespace = $config['urnNamespace'];
+
+      // voRoles config
+      if (!array_key_exists('voRoles', $config) && !is_string($config['voRoles'])) {
+        SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(string required)");
+        throw new SimpleSAML_Error_Exception(
+          "attrauthcomanage configuration error: 'voRoles' not specified");
+      }
+      $this->voRoles = $config['voRoles'];
 
         // urnAuthority config
         if (!array_key_exists('urnAuthority', $config) && !is_string($config['urnAuthority'])) {
@@ -376,36 +396,42 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             $cous = $this->getCOUs($basicInfo['id']);
             foreach ($cous as $cou) {
-                if (empty($cou['name'])) {
+                if (empty($cou['cou_name'])) {
                     continue;
                 }
-                if (!in_array($cou['name'], $this->voWhitelist, true)) {
+                if (!in_array($cou['cou_name'], $this->voWhitelist, true)) {
                     continue;
                 }
-                $voName = $cou['name'];
-                // TODO: make roles configurable
-                $roles = array("member", "vm_operator");
+                $voName = $cou['cou_name'];
                 if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
                     $state['Attributes']['eduPersonEntitlement'] = array();
                 }
-                foreach ($roles as $role) {
-                    $state['Attributes']['eduPersonEntitlement'][] =
-                        $this->urnNamespace          // URN namespace
-                        . ":group:"                  // group literal
-                        . urlencode($voName)         // VO
-                        . ":role=".$role             // role
-                        . "#" . $this->urnAuthority; // AA FQDN
-                    // Enable legacy URN syntax for compatibility reasons?
-                    if ($this->urnLegacy) {
-                        $state['Attributes']['eduPersonEntitlement'][] =
-                            $this->urnNamespace          // URN namespace
-                            . ':' . $this->urnAuthority  // AA FQDN
-                            . ':' . $role                // role
-                            . "@"                        // VO delimiter
-                            . urlencode($voName);        // VO
-                    }
+                // Assemble the roles
+                // If there is nothing to assemble then keep the default ones
+                if (!empty($cou['title']) || !empty($cou['affiliation'])) {
+                  $cou['title'] = !empty($cou['title']) ? $cou['title'] : "";
+                  $cou['affiliation'] = !empty($cou['affiliation']) ? $cou['affiliation'] : "";
+                  // Explode both
+                  $cou_titles = explode(',', $cou['title']);
+                  $cou_affiliations = explode(',', $cou['affiliation']);
+                  $vo_roles = array_unique(array_merge($cou_titles, $cou_affiliations));
+                  $vo_roles = array_filter($vo_roles, function ($value) {
+                    return !empty($value);
+                  });
+                  // Lowercase all roles
+                  $vo_roles = array_map('strtolower', $vo_roles);
+                  // Merge the default roles with the ones constructed from the COUs
+                  $vo_roles = array_unique(array_merge($vo_roles, $this->voRoles));
+                  if (!empty($cou['member']) && settype($cou['member'], "boolean")) {
+                    $vo_roles['admins'][] = 'member';
+                  }
+                  if (!empty($cou['owner']) && settype($cou['owner'], "boolean")) {
+                    $vo_roles['admins'][] = 'owner';
+                  }
                 }
-            }
+                SimpleSAML_Logger::debug("[attrauthcomanage] process voRoles[{$voName}]=". var_export($vo_roles, true));
+                $this->entitlementAssemble($vo_roles, $state, $voName);
+            } // foreach cou
 
             $groups = $this->getGroups($basicInfo['id'], $this->coId);
             foreach ($groups as $group) {
@@ -434,9 +460,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                             . ':' . $this->urnAuthority  // AA FQDN
                             . ':' . $role                // role
                             . "@"                        // VO delimiter
-                            . urlencode($voName);        // VO
+                            . urlencode($groupName);     // VO
                     }
                 }
+            }
+
+            if (!empty($state['Attributes']['eduPersonEntitlement'])) {
+                SimpleSAML_Logger::debug("[attrauthcomanage] process AFTER: eduPersonEntitlement=". var_export($state['Attributes']['eduPersonEntitlement'], true));
             }
         } catch (\Exception $e) {
             $this->_showException($e);
@@ -452,6 +482,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         // TODO: How to deal with 'Expired' accounts?
         if (!empty($basicInfo) && ($basicInfo['status'] === 'PC' || $basicInfo['status'] === 'PA')) {
             \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['registry_login']);
+        }
+        if (!empty($attributes['eduPersonScopedAffiliation'])
+            && !empty($attributes['mail'])
+            && !empty($attributes['givenName'])
+            && !empty($attributes['sn'])) {
+            \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['self_sign_up']);
         }
         \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['sign_up'], $params);
     }
@@ -605,6 +641,33 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
 
         return $result;
+    }
+
+    private function entitlementAssemble($personRoles, &$state, $vo_name, $group_name="")
+    {
+      foreach ($personRoles as $key => $role) {
+        if (!empty($role) && is_array($role) && count($role) > 0) {
+          $this->entitlementAssemble($role, $state, $vo_name, $key);
+          continue;
+        }
+        $group = !empty($group_name) ? ":" . $group_name : "";
+        $entitlement =
+          $this->urnNamespace                 // URN namespace
+          . ":group:"                         // group literal
+          . urlencode($vo_name)               // VO
+          . $group . ":role=" . $role         // role
+          . "#" . $this->urnAuthority;        // AA FQDN
+        $state['Attributes']['eduPersonEntitlement'][] = $entitlement;
+        // TODO: remove in the near future
+        if ($this->urnLegacy) {
+            $state['Attributes']['eduPersonEntitlement'][] =
+                  $this->urnNamespace          // URN namespace
+                  . ':' . $this->urnAuthority  // AA FQDN
+                  . $group . ':' . $role                // role
+                  . "@"                        // VO delimiter
+                  . urlencode($vo_name);       // VO
+          } // Depricated syntax
+      }
     }
 
     private function _showException($e)
