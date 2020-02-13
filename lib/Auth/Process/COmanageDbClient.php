@@ -338,9 +338,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             SimpleSAML_Logger::debug("[attrauthcomanage] process: orgId=". var_export($orgId, true));
             $basicInfo = $this->_getBasicInfo($orgId);
             SimpleSAML_Logger::debug("[attrauthcomanage] process: basicInfo=". var_export($basicInfo, true));
+            if (!empty($basicInfo)) {
+                $state['basicInfo'] = $basicInfo;
+            }
             if (empty($basicInfo['id']) || empty($basicInfo['status']) 
                 || ($basicInfo['status'] !== 'A' && $basicInfo['status'] !== 'GP')) {
                   $state['UserID'] = $orgId;
+                  $state['ReturnProc'] = array(get_class($this), 'retrieveCOPersonData');
                   $params = array();
                   $id = SimpleSAML_Auth_State::saveState($state, 'attrauthcomanage:register');
                   $callback = SimpleSAML_Module::getModuleURL('attrauthcomanage/idp_callback.php', array('stateId' => $id));
@@ -351,123 +355,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                   }
                   $this->_redirect($basicInfo, $state, $params);
             }
-            $loginId = $this->_getLoginId($basicInfo['id']);
-            SimpleSAML_Logger::debug("[attrauthcomanage] process: loginId=". var_export($loginId, true));
-            if ($loginId === null) {
-                // Normally, this should not happen
-                throw new Exception('There is a problem with your account. Please contact support for further assistance.');
-            }
-            $state['Attributes'][$this->userIdAttribute] = array($loginId);
-            $state['UserID'] = $loginId;
-            $profile = $this->getProfile($basicInfo['id']);
-            if (empty($profile)) {
-                return;
-            }
-            foreach ($profile as $attributes) {
-                if (!empty($attributes['given'])) {
-                    $state['Attributes']['givenName'] = array($attributes['given']);
-                }
-                if (!empty($attributes['family'])) {
-                    $state['Attributes']['sn'] = array($attributes['family']);
-                }
-                if (!empty($attributes['mail'])) {
-                    $state['Attributes']['mail'] = array($attributes['mail']);
-                }
-                if (!empty($attributes['affiliation']) && !empty($attributes['o'])) {
-                    $state['Attributes']['eduPersonScopedAffiliation'] = array(
-                        $attributes['affiliation'] . "@" . $attributes['o']
-                    );
-                }
-                if (!empty($attributes['identifier'])) {
-                    $state['Attributes']['uid'] = array($attributes['identifier']);
-                }
-            }
-            $certs = $this->getCerts($basicInfo['id']);
-            foreach ($certs as $cert) {
-                if (empty($cert['subject'])) {
-                    continue;
-                }
-                if (!array_key_exists('distinguishedName', $state['Attributes'])) {
-                    $state['Attributes']['distinguishedName'] = array();
-                }
-                if (!in_array($cert['subject'], $state['Attributes']['distinguishedName'], true)) {
-                    $state['Attributes']['distinguishedName'][] = $cert['subject'];
-                }
-            }
-            $cous = $this->getCOUs($basicInfo['id']);
-            foreach ($cous as $cou) {
-                if (empty($cou['cou_name'])) {
-                    continue;
-                }
-                if (!in_array($cou['cou_name'], $this->voWhitelist, true)) {
-                    continue;
-                }
-                $voName = $cou['cou_name'];
-                if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
-                    $state['Attributes']['eduPersonEntitlement'] = array();
-                }
-                // Assemble the roles
-                // If there is nothing to assemble then keep the default ones
-                if (!empty($cou['title']) || !empty($cou['affiliation'])) {
-                  $cou['title'] = !empty($cou['title']) ? $cou['title'] : "";
-                  $cou['affiliation'] = !empty($cou['affiliation']) ? $cou['affiliation'] : "";
-                  // Explode both
-                  $cou_titles = explode(',', $cou['title']);
-                  $cou_affiliations = explode(',', $cou['affiliation']);
-                  $vo_roles = array_unique(array_merge($cou_titles, $cou_affiliations));
-                  $vo_roles = array_filter($vo_roles, function ($value) {
-                    return !empty($value);
-                  });
-                  // Lowercase all roles
-                  $vo_roles = array_map('strtolower', $vo_roles);
-                  // Merge the default roles with the ones constructed from the COUs
-                  $vo_roles = array_unique(array_merge($vo_roles, $this->voRoles));
-                  if (!empty($cou['member']) && settype($cou['member'], "boolean")) {
-                    $vo_roles['admins'][] = 'member';
-                  }
-                  if (!empty($cou['owner']) && settype($cou['owner'], "boolean")) {
-                    $vo_roles['admins'][] = 'owner';
-                  }
-                }
-                SimpleSAML_Logger::debug("[attrauthcomanage] process voRoles[{$voName}]=". var_export($vo_roles, true));
-                $this->entitlementAssemble($vo_roles, $state, $voName);
-            } // foreach cou
+            // Get all the data from the COPerson and import them in the state
+            $this->retrieveCOPersonData($state);
 
-            $groups = $this->getGroups($basicInfo['id'], $this->coId);
-            foreach ($groups as $group) {
-                $groupName = $group['name'];
-                $roles = array();
-                if ($group['member'] === true) {
-                    $roles[] = "member";
-                }
-                if ($group['owner'] === true) {
-                    $roles[] = "owner";
-                }
-                if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
-                    $state['Attributes']['eduPersonEntitlement'] = array();
-                }
-                foreach ($roles as $role) {
-                    $state['Attributes']['eduPersonEntitlement'][] =
-                        $this->urnNamespace          // URN namespace
-                        . ":group:registry:"         // URN namespace
-                        . urlencode($groupName)      // VO
-                        . ":role=".$role             // role
-                        . "#" . $this->urnAuthority; // AA FQDN
-                    // Enable legacy URN syntax for compatibility reasons?
-                    if ($this->urnLegacy) {
-                        $state['Attributes']['eduPersonEntitlement'][] =
-                            $this->urnNamespace          // URN namespace
-                            . ':' . $this->urnAuthority  // AA FQDN
-                            . ':' . $role                // role
-                            . "@"                        // VO delimiter
-                            . urlencode($groupName);     // VO
-                    }
-                }
-            }
-
-            if (!empty($state['Attributes']['eduPersonEntitlement'])) {
-                SimpleSAML_Logger::debug("[attrauthcomanage] process AFTER: eduPersonEntitlement=". var_export($state['Attributes']['eduPersonEntitlement'], true));
-            }
         } catch (\Exception $e) {
             $this->_showException($e);
         }
@@ -668,6 +558,132 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                   . urlencode($vo_name);       // VO
           } // Depricated syntax
       }
+    }
+
+    private function retrieveCOPersonData(&$state) {
+        if (isset($state['basicInfo'])) {
+            SimpleSAML_Logger::info("[attrauthcomanage] retrieveCOPersonData: " . var_export($state['basicInfo'], true));
+            $basicInfo = $state['basicInfo'];
+        } else {
+            $basicInfo = $this->_getBasicInfo($state['Attributes'][$this->userIdAttribute][0]);
+        }
+        $loginId = $this->_getLoginId($basicInfo['id']);
+        SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: loginId=". var_export($loginId, true));
+        if ($loginId === null) {
+            // Normally, this should not happen
+            throw new Exception('There is a problem with your EGI account. Please contact support for further assistance.');
+        }
+        $state['Attributes'][$this->userIdAttribute] = array($loginId);
+        $state['UserID'] = $loginId;
+        $profile = $this->getProfile($basicInfo['id']);
+        if (empty($profile)) {
+            return;
+        }
+        foreach ($profile as $attributes) {
+            if (!empty($attributes['given'])) {
+                $state['Attributes']['givenName'] = array($attributes['given']);
+            }
+            if (!empty($attributes['family'])) {
+                $state['Attributes']['sn'] = array($attributes['family']);
+            }
+            if (!empty($attributes['mail'])) {
+                $state['Attributes']['mail'] = array($attributes['mail']);
+            }
+            if (!empty($attributes['affiliation']) && !empty($attributes['o'])) {
+                $state['Attributes']['eduPersonScopedAffiliation'] = array(
+                    $attributes['affiliation'] . "@" . $attributes['o']
+                );
+            }
+            if (!empty($attributes['identifier'])) {
+                $state['Attributes']['uid'] = array($attributes['identifier']);
+            }
+        }
+        $certs = $this->getCerts($basicInfo['id']);
+        foreach ($certs as $cert) {
+            if (empty($cert['subject'])) {
+                continue;
+            }
+            if (!array_key_exists('distinguishedName', $state['Attributes'])) {
+                $state['Attributes']['distinguishedName'] = array();
+            }
+            if (!in_array($cert['subject'], $state['Attributes']['distinguishedName'], true)) {
+                $state['Attributes']['distinguishedName'][] = $cert['subject'];
+            }
+        }
+        $cous = $this->getCOUs($basicInfo['id']);
+        foreach ($cous as $cou) {
+            if (empty($cou['cou_name'])) {
+                continue;
+            }
+            if (!in_array($cou['cou_name'], $this->voWhitelist, true)) {
+                continue;
+            }
+            if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
+                $state['Attributes']['eduPersonEntitlement'] = array();
+            }
+            $voName = $cou['cou_name'];
+            // Assemble the roles
+            // If there is nothing to assemble then keep the default ones
+            if (!empty($cou['title']) || !empty($cou['affiliation'])) {
+                $cou['title'] = !empty($cou['title']) ? $cou['title'] : "";
+                $cou['affiliation'] = !empty($cou['affiliation']) ? $cou['affiliation'] : "";
+                // Explode both
+                $cou_titles = explode(',', $cou['title']);
+                $cou_affiliations = explode(',', $cou['affiliation']);
+                $vo_roles = array_unique(array_merge($cou_titles, $cou_affiliations));
+                $vo_roles = array_filter($vo_roles, function ($value) {
+                    return !empty($value);
+                });
+                // Lowercase all roles
+                $vo_roles = array_map('strtolower', $vo_roles);
+                // Merge the default roles with the ones constructed from the COUs
+                $vo_roles = array_unique(array_merge($vo_roles, $this->voRoles));
+                if (!empty($cou['member']) && settype($cou['member'], "boolean")) {
+                    $vo_roles['admins'][] = 'member';
+                }
+                if (!empty($cou['owner']) && settype($cou['owner'], "boolean")) {
+                    $vo_roles['admins'][] = 'owner';
+                }
+            }
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData voRoles[{$voName}]=". var_export($vo_roles, true));
+            $this->entitlementAssemble($vo_roles, $state, $voName);
+        } // foreach cou
+
+        $groups = $this->getGroups($basicInfo['id'], $this->coId);
+        foreach ($groups as $group) {
+            $groupName = $group['name'];
+            $roles = array();
+            if ($group['member'] === true) {
+                $roles[] = "member";
+            }
+            if ($group['owner'] === true) {
+                $roles[] = "owner";
+            }
+            if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
+                $state['Attributes']['eduPersonEntitlement'] = array();
+            }
+            foreach ($roles as $role) {
+                $state['Attributes']['eduPersonEntitlement'][] =
+                    $this->urnNamespace          // URN namespace
+                    . ":group:registry:"         // URN namespace
+                    . urlencode($groupName)      // VO
+                    . ":role=".$role             // role
+                    . "#" . $this->urnAuthority; // AA FQDN
+                // Enable legacy URN syntax for compatibility reasons?
+                if ($this->urnLegacy) {
+                    $state['Attributes']['eduPersonEntitlement'][] =
+                        $this->urnNamespace          // URN namespace
+                        . ':' . $this->urnAuthority  // AA FQDN
+                        . ':' . $role                // role
+                        . "@"                        // VO delimiter
+                        . urlencode($groupName);     // VO
+                }
+            }
+        }
+
+        if (!empty($state['Attributes']['eduPersonEntitlement'])) {
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData AFTER: eduPersonEntitlement=". var_export($state['Attributes']['eduPersonEntitlement'], true));
+        }
     }
 
     private function _showException($e)
