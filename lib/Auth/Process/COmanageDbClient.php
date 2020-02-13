@@ -8,47 +8,60 @@
  *
  * Example configuration in the config/config.php
  *
- *    authproc.aa = array(
+ *    authproc.aa = [
  *       ...
- *       '60' => array(
+ *       '60' => [
  *            'class' => 'attrauthcomanage:COmanageDbClient',
  *            'coId' => 2,
  *            'userIdAttribute' => 'eduPersonUniqueId',
- *            'voWhitelist' => array(
+ *            'voWhitelist' => [
  *               'vo.example.com',
  *               'vo.example2.com',
- *            ),
- *            'communityIdps' => array(
+ *            ],
+ *            'communityIdps' => [
  *               'https://example1.com/idp',
- *            ),
- *            'voRoles' => array(
+ *            ],
+ *            'voRoles' => [
  *               'member',
  *               'faculty',
- *            ),
+ *            ],
  *            'urnNamespace' => 'urn:mace:example.eu',
  *            'urnAuthority'         => 'example.eu',
- *            'registryUrls' => array(
+ *            'registryUrls' => [
  *               'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1',
  *               'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2',
  *               'community_sign_up' => 'https://example.com/registry/co_petitions/start/coef:3',
  *               'registry_login'    => 'https://example.com/registry/co_petitions/auth/login',
- *            ),
- *       ),
+ *            ],
+ *       ],
  *
  * @author Nicolas Liampotis <nliam@grnet.gr>
  * @author Nick Evangelou <nikosev@grnet.gr>
  * @author Ioannis Igoumenos <ioigoume@grnet.gr>
  */
-class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_Auth_ProcessingFilter
+namespace SimpleSAML\Module\attrauthcomanage\Auth\Process;
+
+use PDO;
+use SimpleSAML\Auth\State;
+use SimpleSAML\Configuration;
+use SimpleSAML\Error;
+use SimpleSAML\Logger;
+use SimpleSAML\Module;
+use SimpleSAML\XHTML\Template;
+use SimpleSAML\Utils\HTTP;
+use SimpleSAML\Database;
+
+class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
 {
     // List of SP entity IDs that should be excluded from this filter.
-    private $blacklist = array();
+    private $blacklist = [];
     // List of allowed types of registry urls
-    private $registryUrlTypesAllowed = array(
+    private $registryUrlTypesAllowed = [
       'self_sign_up',
       'sign_up',
       'community_sign_up',
-      'registry_login');
+      'registry_login'
+    ];
 
     private $coId;
 
@@ -57,12 +70,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $userIdAttribute = 'eduPersonUniqueId';
 
     // List of VO names that should be included in entitlements.
-    private $voWhitelist = array();
+    private $voWhitelist = [];
 
     private $urnNamespace = null;
     private $urnAuthority = null;
-    private $registryUrls = array();
-    private $communityIdps = array();
+    private $registryUrls = [];
+    private $communityIdps = [];
 
     // If true, this filter will also generate entitlements using the
     // legacy URN format
@@ -209,45 +222,45 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         assert('is_array($config)');
 
         if (!array_key_exists('coId', $config)) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coId' not specified");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'coId' not specified"); 
+            Logger::error("[attrauthcomanage] Configuration error: 'coId' not specified");
+            throw new Error\Exception(
+                "attrauthcomanage configuration error: 'coId' not specified");
         }
         if (!is_int($config['coId'])) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coId' not an integer number");
-            throw new SimpleSAML_Error_Exception(
+            Logger::error("[attrauthcomanage] Configuration error: 'coId' not an integer number");
+            throw new Error\Exception(
                 "attrauthcomanage configuration error: 'coId' not an integer number");
         }
         $this->coId = $config['coId'];
 
         // urnNamespace config
         if (!array_key_exists('urnNamespace', $config) && !is_string($config['urnNamespace'])) {
-          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnNamespace' not specified or wrong format(string required)");
-          throw new SimpleSAML_Error_Exception(
+          Logger::error("[attrauthcomanage] Configuration error: 'urnNamespace' not specified or wrong format(string required)");
+          throw new Error\Exception(
             "attrauthcomanage configuration error: 'urnNamespace' not specified");
         }
         $this->urnNamespace = $config['urnNamespace'];
 
       // voRoles config
       if (!array_key_exists('voRoles', $config) && !is_string($config['voRoles'])) {
-        SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(string required)");
-        throw new SimpleSAML_Error_Exception(
+        Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(string required)");
+        throw new Error\Exception(
           "attrauthcomanage configuration error: 'voRoles' not specified");
       }
       $this->voRoles = $config['voRoles'];
 
         // urnAuthority config
         if (!array_key_exists('urnAuthority', $config) && !is_string($config['urnAuthority'])) {
-          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnAuthority' not specified or wrong format(string required)");
-          throw new SimpleSAML_Error_Exception(
+          Logger::error("[attrauthcomanage] Configuration error: 'urnAuthority' not specified or wrong format(string required)");
+          throw new Error\Exception(
             "attrauthcomanage configuration error: 'urnAuthority' not specified");
         }
         $this->urnAuthority = $config['urnAuthority'];
 
         // Redirect Urls config
         if (!array_key_exists('registryUrls', $config)) {
-          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' not specified");
-          throw new SimpleSAML_Error_Exception(
+          Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' not specified");
+          throw new Error\Exception(
             "attrauthcomanage configuration error: 'registryUrls' not specified");
         } else {
           // Check if the keys exist
@@ -259,8 +272,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             return !filter_var($value, FILTER_VALIDATE_URL);
           });
           if (!empty($invalid_keys) || !empty($invalid_urls)) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' url or key configuration error");
-            throw new SimpleSAML_Error_Exception(
+            Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' url or key configuration error");
+            throw new Error\Exception(
               "attrauthcomanage configuration error: 'registryUrls' url or key configuration error");
           }
         }
@@ -268,8 +281,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
         if (array_key_exists('coUserIdType', $config)) {
             if (!is_string($config['coUserIdType'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coUserIdType' not a string literal");
-                throw new SimpleSAML_Error_Exception(
+                Logger::error("[attrauthcomanage] Configuration error: 'coUserIdType' not a string literal");
+                throw new Error\Exception(
                     "attrauthcomanage configuration error: 'coUserIdType' not a string literal");
             }
             $this->coUserIdType = $config['coUserIdType'];
@@ -277,8 +290,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
         if (array_key_exists('userIdAttribute', $config)) {
             if (!is_string($config['userIdAttribute'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not a string literal");
-                throw new SimpleSAML_Error_Exception(
+                Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not a string literal");
+                throw new Error\Exception(
                     "attrauthcomanage configuration error: 'userIdAttribute' not a string literal");
             }
             $this->userIdAttribute = $config['userIdAttribute'];
@@ -286,24 +299,24 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
         if (array_key_exists('blacklist', $config)) {
             if (!is_array($config['blacklist'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'blacklist' not an array");
-                throw new SimpleSAML_Error_Exception(
+                Logger::error("[attrauthcomanage] Configuration error: 'blacklist' not an array");
+                throw new Error\Exception(
                     "attrauthcomanage configuration error: 'blacklist' not an array");
             }
             $this->blacklist = $config['blacklist'];
         }
         if (array_key_exists('voWhitelist', $config)) {
             if (!is_array($config['voWhitelist'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voWhitelist' not an array");
-                throw new SimpleSAML_Error_Exception(
+                Logger::error("[attrauthcomanage] Configuration error: 'voWhitelist' not an array");
+                throw new Error\Exception(
                     "attrauthcomanage configuration error: 'voWhitelist' not an array");
             }
-            $this->voWhitelist = $config['voWhitelist']; 
+            $this->voWhitelist = $config['voWhitelist'];
         }
         if (array_key_exists('communityIdps', $config)) {
             if (!is_array($config['communityIdps'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'communityIdps' not an array");
-                throw new SimpleSAML_Error_Exception(
+                Logger::error("[attrauthcomanage] Configuration error: 'communityIdps' not an array");
+                throw new Error\Exception(
                     "attrauthcomanage configuration error: 'communityIdps' not an array");
             }
             $this->communityIdps = $config['communityIdps'];
@@ -311,8 +324,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
         if (array_key_exists('urnLegacy', $config)) {
             if (!is_bool($config['urnLegacy'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnLegacy' not a boolean");
-                throw new SimpleSAML_Error_Exception(
+                Logger::error("[attrauthcomanage] Configuration error: 'urnLegacy' not a boolean");
+                throw new Error\Exception(
                     "attrauthcomanage configuration error: 'urnLegacy' not a boolean");
             }
             $this->urnLegacy = $config['urnLegacy'];
@@ -324,40 +337,42 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         try {
             assert('is_array($state)');
             if (isset($state['SPMetadata']['entityid']) && in_array($state['SPMetadata']['entityid'], $this->blacklist, true)) {
-                SimpleSAML_Logger::debug("[attrauthcomanage] process: Skipping blacklisted SP ". var_export($state['SPMetadata']['entityid'], true));
+                Logger::debug("[attrauthcomanage] process: Skipping blacklisted SP ". var_export($state['SPMetadata']['entityid'], true));
                 return;
             }
             if (empty($state['Attributes'][$this->userIdAttribute])) {
                 //echo '<pre>' . var_export($state, true) . '</pre>';
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not available");
-                throw new SimpleSAML_Error_Exception(
+                Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not available");
+                throw new Error\Exception(
                     "attrauthcomanage configuration error: 'userIdAttribute' not available");
             }
             unset($state['Attributes']['uid']);
             $orgId = $state['Attributes'][$this->userIdAttribute][0];
-            SimpleSAML_Logger::debug("[attrauthcomanage] process: orgId=". var_export($orgId, true));
+            Logger::debug("[attrauthcomanage] process: orgId=". var_export($orgId, true));
             $basicInfo = $this->_getBasicInfo($orgId);
-            SimpleSAML_Logger::debug("[attrauthcomanage] process: basicInfo=". var_export($basicInfo, true));
-            if (empty($basicInfo['id']) || empty($basicInfo['status']) 
+            Logger::debug("[attrauthcomanage] process: basicInfo=". var_export($basicInfo, true));
+            if (empty($basicInfo['id']) || empty($basicInfo['status'])
                 || ($basicInfo['status'] !== 'A' && $basicInfo['status'] !== 'GP')) {
                   $state['UserID'] = $orgId;
-                  $params = array();
-                  $id = SimpleSAML_Auth_State::saveState($state, 'attrauthcomanage:register');
-                  $callback = SimpleSAML_Module::getModuleURL('attrauthcomanage/idp_callback.php', array('stateId' => $id));
-                  SimpleSAML_Logger::debug("[attrauthcomanage] process: callback url => " . $callback);
-                  $params = array("targetnew" => $callback);
+                  $params = [];
+                  $id = State::saveState($state, 'attrauthcomanage:register');
+                  $callback = Module::getModuleURL('attrauthcomanage/idp_callback.php', ['stateId' => $id]);
+                  Logger::debug("[attrauthcomanage] process: callback url => " . $callback);
+                  $params = [
+                    "targetnew" => $callback
+                  ];
                   if (!empty($state['saml:AuthenticatingAuthority']) && in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)) {
-                    \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
+                      HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
                   }
                   $this->_redirect($basicInfo, $state, $params);
             }
             $loginId = $this->_getLoginId($basicInfo['id']);
-            SimpleSAML_Logger::debug("[attrauthcomanage] process: loginId=". var_export($loginId, true));
+            Logger::debug("[attrauthcomanage] process: loginId=". var_export($loginId, true));
             if ($loginId === null) {
                 // Normally, this should not happen
-                throw new Exception('There is a problem with your account. Please contact support for further assistance.');
+                throw new Error\Exception('There is a problem with your account. Please contact support for further assistance.');
             }
-            $state['Attributes'][$this->userIdAttribute] = array($loginId);
+            $state['Attributes'][$this->userIdAttribute] = [$loginId];
             $state['UserID'] = $loginId;
             $profile = $this->getProfile($basicInfo['id']);
             if (empty($profile)) {
@@ -365,21 +380,21 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             foreach ($profile as $attributes) {
                 if (!empty($attributes['given'])) {
-                    $state['Attributes']['givenName'] = array($attributes['given']);
+                    $state['Attributes']['givenName'] = [$attributes['given']];
                 }
                 if (!empty($attributes['family'])) {
-                    $state['Attributes']['sn'] = array($attributes['family']);
+                    $state['Attributes']['sn'] = [$attributes['family']];
                 }
                 if (!empty($attributes['mail'])) {
-                    $state['Attributes']['mail'] = array($attributes['mail']);
+                    $state['Attributes']['mail'] = [$attributes['mail']];
                 }
                 if (!empty($attributes['affiliation']) && !empty($attributes['o'])) {
-                    $state['Attributes']['eduPersonScopedAffiliation'] = array(
+                    $state['Attributes']['eduPersonScopedAffiliation'] = [
                         $attributes['affiliation'] . "@" . $attributes['o']
-                    );
+                    ];
                 }
                 if (!empty($attributes['identifier'])) {
-                    $state['Attributes']['uid'] = array($attributes['identifier']);
+                    $state['Attributes']['uid'] = [$attributes['identifier']];
                 }
             }
             $certs = $this->getCerts($basicInfo['id']);
@@ -388,7 +403,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     continue;
                 }
                 if (!array_key_exists('distinguishedName', $state['Attributes'])) {
-                    $state['Attributes']['distinguishedName'] = array();
+                    $state['Attributes']['distinguishedName'] = [];
                 }
                 if (!in_array($cert['subject'], $state['Attributes']['distinguishedName'], true)) {
                     $state['Attributes']['distinguishedName'][] = $cert['subject'];
@@ -404,7 +419,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 }
                 $voName = $cou['cou_name'];
                 if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
-                    $state['Attributes']['eduPersonEntitlement'] = array();
+                    $state['Attributes']['eduPersonEntitlement'] = [];
                 }
                 // Assemble the roles
                 // If there is nothing to assemble then keep the default ones
@@ -429,14 +444,14 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     $vo_roles['admins'][] = 'owner';
                   }
                 }
-                SimpleSAML_Logger::debug("[attrauthcomanage] process voRoles[{$voName}]=". var_export($vo_roles, true));
+                Logger::debug("[attrauthcomanage] process voRoles[{$voName}]=". var_export($vo_roles, true));
                 $this->entitlementAssemble($vo_roles, $state, $voName);
             } // foreach cou
 
             $groups = $this->getGroups($basicInfo['id'], $this->coId);
             foreach ($groups as $group) {
                 $groupName = $group['name'];
-                $roles = array();
+                $roles = [];
                 if ($group['member'] === true) {
                     $roles[] = "member";
                 }
@@ -444,7 +459,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     $roles[] = "owner";
                 }
                 if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
-                    $state['Attributes']['eduPersonEntitlement'] = array();
+                    $state['Attributes']['eduPersonEntitlement'] = [];
                 }
                 foreach ($roles as $role) {
                     $state['Attributes']['eduPersonEntitlement'][] =
@@ -466,51 +481,51 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
 
             if (!empty($state['Attributes']['eduPersonEntitlement'])) {
-                SimpleSAML_Logger::debug("[attrauthcomanage] process AFTER: eduPersonEntitlement=". var_export($state['Attributes']['eduPersonEntitlement'], true));
+              Logger::debug("[attrauthcomanage] process AFTER: eduPersonEntitlement=". var_export($state['Attributes']['eduPersonEntitlement'], true));
             }
         } catch (\Exception $e) {
             $this->_showException($e);
         }
     }
 
-    private function _redirect($basicInfo, &$state, $params = array())
+    private function _redirect($basicInfo, &$state, $params = [])
     {
         $attributes = $state['Attributes'];
-        SimpleSAML_Logger::debug("[attrauthcomanage] _redirect: attributes="
+        Logger::debug("[attrauthcomanage] _redirect: attributes="
             . var_export($attributes, true));
         // Check Pending Confirmation (PC) / Pending Approval (PA) status
         // TODO: How to deal with 'Expired' accounts?
         if (!empty($basicInfo) && ($basicInfo['status'] === 'PC' || $basicInfo['status'] === 'PA')) {
-            \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['registry_login']);
+            HTTP::redirectTrustedURL($this->registryUrls['registry_login']);
         }
         if (!empty($attributes['eduPersonScopedAffiliation'])
             && !empty($attributes['mail'])
             && !empty($attributes['givenName'])
             && !empty($attributes['sn'])) {
-            \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['self_sign_up']);
+            HTTP::redirectTrustedURL($this->registryUrls['self_sign_up']);
         }
-        \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['sign_up'], $params);
+        HTTP::redirectTrustedURL($this->registryUrls['sign_up'], $params);
     }
 
     private function _getBasicInfo($orgId)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] _getBasicInfo: orgId="
+        Logger::debug("[attrauthcomanage] _getBasicInfo: orgId="
             . var_export($orgId, true));
 
-        $db = SimpleSAML\Database::getInstance();
-        $queryParams = array(
-            'coId' => array($this->coId, PDO::PARAM_INT),
-            'coPersonOrgId' => array($orgId, PDO::PARAM_STR),
-        );
+        $db = Database::getInstance();
+        $queryParams = [
+            'coId' => [$this->coId, PDO::PARAM_INT],
+            'coPersonOrgId' => [$orgId, PDO::PARAM_STR],
+        ];
         $stmt = $db->read($this->_basicInfoQuery, $queryParams);
         if ($stmt->execute()) {
             if ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                SimpleSAML_Logger::debug("[attrauthcomanage] _getBasicInfo: result="
+                Logger::debug("[attrauthcomanage] _getBasicInfo: result="
                     . var_export($result, true));
                return $result;
             }
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+            throw new Error\Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
         }
 
         return null;
@@ -518,23 +533,23 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     private function _getLoginId($personId)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] _getLoginId: personId="
+        Logger::debug("[attrauthcomanage] _getLoginId: personId="
             . var_export($personId, true));
 
-        $db = SimpleSAML\Database::getInstance();
-        $queryParams = array(
-            'coPersonId' => array($personId, PDO::PARAM_INT),
-            'coPersonIdType' => array($this->coUserIdType, PDO::PARAM_STR),
-        );
+        $db = Database::getInstance();
+        $queryParams = [
+            'coPersonId' => [$personId, PDO::PARAM_INT],
+            'coPersonIdType' => [$this->coUserIdType, PDO::PARAM_STR],
+        ];
         $stmt = $db->read($this->_loginIdQuery, $queryParams);
         if ($stmt->execute()) {
             if ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                SimpleSAML_Logger::debug("[attrauthcomanage] _getLoginId: result="
+                Logger::debug("[attrauthcomanage] _getLoginId: result="
                     . var_export($result, true));
                return $result['identifier'];
             }
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+            throw new Error\Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
         }
 
         return null;
@@ -542,24 +557,24 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     private function getProfile($personId)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] getProfile: personId="
+        Logger::debug("[attrauthcomanage] getProfile: personId="
             . var_export($personId, true));
 
-        $db = SimpleSAML\Database::getInstance();
-        $queryParams = array(
-            'coPersonId' => array($personId, PDO::PARAM_INT),
-        );
+        $db = Database::getInstance();
+        $queryParams = [
+            'coPersonId' => [$personId, PDO::PARAM_INT],
+        ];
         $stmt = $db->read($this->profileQuery, $queryParams);
         if ($stmt->execute()) {
-            $result = array();
+            $result = [];
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $result[] = $row;
             }
-            SimpleSAML_Logger::debug("[attrauthcomanage] getProfile: result="
+            Logger::debug("[attrauthcomanage] getProfile: result="
                 . var_export($result, true));
             return $result;
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+            throw new Error\Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
         }
 
         return null;
@@ -567,24 +582,24 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     private function getCerts($personId)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] getCerts: personId="
+        Logger::debug("[attrauthcomanage] getCerts: personId="
             . var_export($personId, true));
 
-        $result = array();
-        $db = SimpleSAML\Database::getInstance();
-        $queryParams = array(
-            'coPersonId' => array($personId, PDO::PARAM_INT),
-        );
+        $result = [];
+        $db = Database::getInstance();
+        $queryParams = [
+            'coPersonId' => [$personId, PDO::PARAM_INT],
+        ];
         $stmt = $db->read($this->certQuery, $queryParams);
         if ($stmt->execute()) {
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $result[] = $row;
             }
-            SimpleSAML_Logger::debug("[attrauthcomanage] getCerts: result="
+            Logger::debug("[attrauthcomanage] getCerts: result="
                 . var_export($result, true));
             return $result;
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+            throw new Error\Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
         }
 
         return $result;
@@ -592,24 +607,24 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     private function getCOUs($personId)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] getCOUs: personId="
+        Logger::debug("[attrauthcomanage] getCOUs: personId="
             . var_export($personId, true));
 
-        $result = array();
-        $db = SimpleSAML\Database::getInstance();
-        $queryParams = array(
-            'coPersonId' => array($personId, PDO::PARAM_INT),
-        );
+        $result = [];
+        $db = Database::getInstance();
+        $queryParams = [
+            'coPersonId' => [$personId, PDO::PARAM_INT],
+        ];
         $stmt = $db->read($this->couQuery, $queryParams);
         if ($stmt->execute()) {
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $result[] = $row;
             }
-            SimpleSAML_Logger::debug("[attrauthcomanage] getCOUs: result="
+            Logger::debug("[attrauthcomanage] getCOUs: result="
                 . var_export($result, true));
             return $result;
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+            throw new Error\Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
         }
 
         return $result;
@@ -617,27 +632,27 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     private function getGroups($personId, $coId)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] getGroups: personId="
+        Logger::debug("[attrauthcomanage] getGroups: personId="
             . var_export($personId, true));
-        SimpleSAML_Logger::debug("[attrauthcomanage] getGroups: coId="
+        Logger::debug("[attrauthcomanage] getGroups: coId="
           . var_export($coId, true));
 
-        $result = array();
-        $db = SimpleSAML\Database::getInstance();
-        $queryParams = array(
-            'coPersonId' => array($personId, PDO::PARAM_INT),
-            'coId' => array($coId, PDO::PARAM_INT),
-        );
+        $result = [];
+        $db = Database::getInstance();
+        $queryParams = [
+            'coPersonId' => [$personId, PDO::PARAM_INT],
+            'coId' => [$coId, PDO::PARAM_INT],
+        ];
         $stmt = $db->read($this->groupQuery, $queryParams);
         if ($stmt->execute()) {
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $result[] = $row;
             }
-            SimpleSAML_Logger::debug("[attrauthcomanage] getGroups: result="
+            Logger::debug("[attrauthcomanage] getGroups: result="
                 . var_export($result, true));
             return $result;
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+            throw new Error\Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
         }
 
         return $result;
@@ -672,8 +687,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     private function _showException($e)
     {
-        $globalConfig = SimpleSAML_Configuration::getInstance();
-        $t = new SimpleSAML_XHTML_Template($globalConfig, 'attrauthcomanage:exception.tpl.php');
+        $globalConfig = Configuration::getInstance();
+        $t = new Template($globalConfig, 'attrauthcomanage:exception.tpl.php');
         $t->data['e'] = $e->getMessage();
         $t->show();
         exit();
