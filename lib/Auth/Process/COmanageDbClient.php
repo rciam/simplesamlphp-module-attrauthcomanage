@@ -638,10 +638,10 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 $vo_roles = array_map('strtolower', $vo_roles);
                 // Merge the default roles with the ones constructed from the COUs
                 $vo_roles = array_unique(array_merge($vo_roles, $this->voRoles));
-                if (!empty($cou['member']) && settype($cou['member'], "boolean")) {
+                if (!empty($cou['member']) && filter_var($cou['member'], FILTER_VALIDATE_BOOLEAN)) {
                     $vo_roles['admins'][] = 'member';
                 }
-                if (!empty($cou['owner']) && settype($cou['owner'], "boolean")) {
+                if (!empty($cou['owner']) && filter_var($cou['owner'], FILTER_VALIDATE_BOOLEAN)) {
                     $vo_roles['admins'][] = 'owner';
                 }
             }
