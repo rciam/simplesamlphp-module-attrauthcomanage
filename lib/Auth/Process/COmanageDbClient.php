@@ -344,10 +344,10 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                   if (!empty($state['saml:AuthenticatingAuthority']) && in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)) {
                       // Redirect to community signup flow with all
                       // attributes available including affiliation
-                      if (!empty($attributes['voPersonExternalAffiliation'])
-                          && !empty($attributes['mail'])
-                          && !empty($attributes['givenName'])
-                          && !empty($attributes['sn'])) {
+                      if (!empty($state['Attributes']['voPersonExternalAffiliation'])
+                          && !empty($state['Attributes']['mail'])
+                          && !empty($state['Attributes']['givenName'])
+                          && !empty($state['Attributes']['sn'])) {
                           \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
                        }
                        \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['community_sign_up_no_aff'], $params);
