@@ -809,7 +809,11 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 continue;
             }
             if (!in_array($cou['cou_name'], $this->voWhitelist, true)) {
+              // Check if there is a root COU that is in the voWhitelist
+              $parent_cou_name = $this->getCouRootParent($cou['cou_name'],$nested_cous);
+              if (!in_array($parent_cou_name, $this->voWhitelist, true)) {
                 continue;
+              }
             }
             if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
                 $state['Attributes']['eduPersonEntitlement'] = array();
@@ -882,6 +886,21 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         if (!empty($state['Attributes']['eduPersonEntitlement'])) {
             SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData AFTER: eduPersonEntitlement=". var_export($state['Attributes']['eduPersonEntitlement'], true));
         }
+    }
+
+    /**
+     * @param string $cou_name  the name of the COU
+     * @param array $cou_nested Array containing the tree structure of the relevant COUs as composed in getCouTreeStructure
+     * @return string cou_name or empty string
+     */
+    private function getCouRootParent($cou_name, $cou_nested) {
+      foreach($cou_nested as $hierarchy) {
+        if(!in_array($cou_name, $hierarchy['path_full_list'])) {
+          continue;
+        }
+        return array_values($hierarchy['path_full_list'])[0];
+      }
+      return '';
     }
 
     private function _showException($e)
