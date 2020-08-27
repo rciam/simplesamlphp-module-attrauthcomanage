@@ -652,7 +652,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
       SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: cou_tree_structure="
         . var_export($cou_tree_structure, true));
 
-      if(empty($member_entitlements)) {
+      if(empty($member_entitlements) || empty($cou_tree_structure)) {
         return;
       }
 
@@ -678,31 +678,32 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
       // Create the list of all potential groups
       $allowed_cou_ids = array_keys($filtered_entitlements);
-      $list_of_candidate_nested_groups = [];
+      $list_of_candidate_full_nested_groups = [];
       foreach($cou_tree_structure as $sub_tree) {
-        $candidate_entitlement = [];
-        $candidate_cou_id = [];
+        $full_candidate_cou_id = '';
+        $full_candidate_entitlement = '';
         foreach($sub_tree['path_full_list'] as $cou_id => $cou_name) {
           if(in_array($cou_id, $allowed_cou_ids, true)) {
-            $candidate_entitlement[] = urlencode($cou_name);
-            $candidate_cou_id[] = $cou_id;
+            $key = array_search($cou_id, $sub_tree['path_id_list']);
+            $cou_name_hierarchy = array_slice($sub_tree['path_full_list'], 0, $key+1);
+            $cou_name_hierarchy = array_map(function($cou_name) {
+              return urlencode($cou_name);
+            }, $cou_name_hierarchy);
+            $full_candidate_entitlement = implode(':', $cou_name_hierarchy);
+            $cou_id_hierarchy = array_slice($sub_tree['path_id_list'], 0, $key+1);
+            $full_candidate_cou_id = implode(':', $cou_id_hierarchy);
           }
         }
-        $list_of_candidate_nested_groups[implode(':', $candidate_cou_id)] = implode(':', $candidate_entitlement);
-      }
-      // Iterate and unset the ones that are single valued
-      foreach($list_of_candidate_nested_groups as $key => $candidate) {
-        if(is_int($key)) {
-          unset($list_of_candidate_nested_groups[$key]);
-        }
+        $list_of_candidate_full_nested_groups[$full_candidate_cou_id] = $full_candidate_entitlement;
       }
 
       SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: list_of_candidate_entitlement="
         . var_export($list_of_candidate_nested_groups, true));
 
       // Filter the ones that are subgroups from another
-      $path_id_arr = array_keys($list_of_candidate_nested_groups);
-      $path_id_cp = array_keys($list_of_candidate_nested_groups);
+      // Todo: Make this configuration
+      $path_id_arr = array_keys($list_of_candidate_full_nested_groups);
+      $path_id_cp = array_keys($list_of_candidate_full_nested_groups);
       foreach($path_id_arr as $path_id_str) {
         foreach($path_id_cp as $path_id_str_cp) {
             if(strpos($path_id_str_cp, $path_id_str) !== false
@@ -713,30 +714,32 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
       }
 
-      $list_of_candidate_nested_groups = array_filter(
-        $list_of_candidate_nested_groups,
-        static function ($keys) use ($path_id_arr) {
-          return in_array($keys, $path_id_arr, true);
-        },
+      $list_of_candidate_full_nested_groups = array_filter(
+        $list_of_candidate_full_nested_groups,
+          static function ($keys) use ($path_id_arr) {
+            return in_array($keys, $path_id_arr, true);
+          },
         ARRAY_FILTER_USE_KEY
       );
 
+      // Remove all non root non nested cou entitlements from the $state['Attributes']['eduPersonEntitlement']
+      $re='/(.*):role=member(.*)/m';
+      foreach($filtered_entitlements as $couid => $entitlement) {
+        if($this->isRootCou($couid,$cou_tree_structure)){
+          continue;
+        }
+        foreach($this->voRoles as $role) {
+          $replacement = '$1:role=' . $role . '$2';
+          $replaced_entitlement = preg_replace($re, $replacement, $entitlement);
+          $key = array_search($replaced_entitlement, $state['Attributes']['eduPersonEntitlement']);
+          if (!is_bool($key)) {
+            unset($replaced_entitlement, $state['Attributes']['eduPersonEntitlement'][$key]);
+          }
+        }
+      }
+      SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: filtered_entitlements=". var_export($filtered_entitlements, true));
 
-      SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: list_of_candidate_nested_groups="
-        . var_export($list_of_candidate_nested_groups, true));
-
-      // Remove the filtered entitlements from the state
-      // todo: Remove single entitlements from the state
-//      $entitlement_values = array_values($filtered_entitlements);
-//      $state['Attributes']['eduPersonEntitlement'] = array_filter(
-//        $state['Attributes']['eduPersonEntitlement'],
-//        static function($entitlement, $cou_id) use($entitlement_values) {
-//            return !in_array($entitlement, $entitlement_values, true);
-//        },
-//        ARRAY_FILTER_USE_BOTH
-//      );
-
-      foreach($list_of_candidate_nested_groups as $vo_nested) {
+      foreach($list_of_candidate_full_nested_groups as $vo_nested) {
         $entitlement =
           $this->urnNamespace                 // URN namespace
           . ":group:"                         // group literal
@@ -901,6 +904,21 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         return array_values($hierarchy['path_full_list'])[0];
       }
       return '';
+    }
+
+    /**
+     * @param integer $couid
+     * @param array $cou_nested
+     * @return bool
+     */
+    private function isRootCou($couid, $cou_nested) {
+      foreach($cou_nested as $hierarchy) {
+        $root_key = array_keys($hierarchy['path_full_list'])[0];
+        if($root_key == $couid) {
+          return true;
+        }
+      }
+      return false;
     }
 
     private function _showException($e)
