@@ -26,7 +26,8 @@
  *               'faculty',
  *            ),
  *            'urnNamespace' => 'urn:mace:example.eu',
- *            'urnAuthority'         => 'example.eu',
+ *            'urnAuthority' => 'example.eu',
+ *            'mergeEntitlements' => false,
  *            'registryUrls' => array(
  *               'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1',
  *               'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2',
@@ -317,6 +318,14 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     "attrauthcomanage configuration error: 'urnLegacy' not a boolean");
             }
             $this->urnLegacy = $config['urnLegacy'];
+        }
+        if(array_key_exists('mergeEntitlements', $config)) {
+          if (!is_bool($config['urnLegacy'])) {
+            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'mergeEntitlements' not a boolean");
+            throw new SimpleSAML_Error_Exception(
+              "attrauthcomanage configuration error: 'mergeEntitlements' not a boolean");
+          }
+          $this->mergeEntitlements = $config['mergeEntitlements'];
         }
     }
 
@@ -701,26 +710,27 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . var_export($list_of_candidate_nested_groups, true));
 
       // Filter the ones that are subgroups from another
-      // Todo: Make this configuration
-      $path_id_arr = array_keys($list_of_candidate_full_nested_groups);
-      $path_id_cp = array_keys($list_of_candidate_full_nested_groups);
-      foreach($path_id_arr as $path_id_str) {
-        foreach($path_id_cp as $path_id_str_cp) {
-            if(strpos($path_id_str_cp, $path_id_str) !== false
-               && strlen($path_id_str) < strlen($path_id_str_cp)) {
-              unset($path_id_arr[array_search($path_id_str, $path_id_arr)]);
-              continue;
-            }
+      if($this->mergeEntitlements) {
+        $path_id_arr = array_keys($list_of_candidate_full_nested_groups);
+        $path_id_cp = array_keys($list_of_candidate_full_nested_groups);
+        foreach ($path_id_arr as $path_id_str) {
+          foreach ($path_id_cp as $path_id_str_cp) {
+            if (strpos($path_id_str_cp, $path_id_str) !== false
+                  && strlen($path_id_str) < strlen($path_id_str_cp)) {
+                 unset($path_id_arr[array_search($path_id_str, $path_id_arr)]);
+                 continue;
+               }
+           }
         }
-      }
 
-      $list_of_candidate_full_nested_groups = array_filter(
-        $list_of_candidate_full_nested_groups,
-          static function ($keys) use ($path_id_arr) {
-            return in_array($keys, $path_id_arr, true);
-          },
-        ARRAY_FILTER_USE_KEY
-      );
+        $list_of_candidate_full_nested_groups = array_filter(
+          $list_of_candidate_full_nested_groups,
+            static function ($keys) use ($path_id_arr) {
+              return in_array($keys, $path_id_arr, true);
+            },
+          ARRAY_FILTER_USE_KEY
+        );
+      }
 
       // Remove all non root non nested cou entitlements from the $state['Attributes']['eduPersonEntitlement']
       $re='/(.*):role=member(.*)/m';
