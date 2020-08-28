@@ -64,10 +64,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $urnAuthority = null;
     private $registryUrls = array();
     private $communityIdps = array();
-
+    private $mergeEntitlements = false;
     // If true, this filter will also generate entitlements using the
     // legacy URN format
     private $urnLegacy = false;
+    private $voRoles = array();
+    private $voRolesDef = array();
 
     private $_basicInfoQuery = 'select'
         . ' person.id,'
@@ -230,13 +232,16 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
         $this->urnNamespace = $config['urnNamespace'];
 
-      // voRoles config
-      if (!array_key_exists('voRoles', $config) && !is_string($config['voRoles'])) {
-        SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(string required)");
-        throw new SimpleSAML_Error_Exception(
-          "attrauthcomanage configuration error: 'voRoles' not specified");
-      }
-      $this->voRoles = $config['voRoles'];
+        // voRoles config
+        if (!array_key_exists('voRoles', $config) && !is_string($config['voRoles'])) {
+          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(string required)");
+          throw new SimpleSAML_Error_Exception(
+            "attrauthcomanage configuration error: 'voRoles' not specified");
+        }
+        $this->voRoles = $config['voRoles'];
+        // Get a copy of teh default Roles before enriching with COmanage roles
+        $voRolesObject = new ArrayObject($config['voRoles']);
+        $this->voRolesDef = $voRolesObject->getArrayCopy();
 
         // urnAuthority config
         if (!array_key_exists('urnAuthority', $config) && !is_string($config['urnAuthority'])) {
@@ -683,54 +688,82 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
           ARRAY_FILTER_USE_KEY
       );
       SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: filtered_entitlements="
-        . var_export($filtered_entitlements, true));
+       . var_export($filtered_entitlements, true));
 
       // Create the list of all potential groups
       $allowed_cou_ids = array_keys($filtered_entitlements);
       $list_of_candidate_full_nested_groups = [];
       foreach($cou_tree_structure as $sub_tree) {
-        $full_candidate_cou_id = '';
-        $full_candidate_entitlement = '';
-        foreach($sub_tree['path_full_list'] as $cou_id => $cou_name) {
-          if(in_array($cou_id, $allowed_cou_ids, true)) {
-            $key = array_search($cou_id, $sub_tree['path_id_list']);
-            $cou_name_hierarchy = array_slice($sub_tree['path_full_list'], 0, $key+1);
-            $cou_name_hierarchy = array_map(function($cou_name) {
-              return urlencode($cou_name);
-            }, $cou_name_hierarchy);
-            $full_candidate_entitlement = implode(':', $cou_name_hierarchy);
-            $cou_id_hierarchy = array_slice($sub_tree['path_id_list'], 0, $key+1);
-            $full_candidate_cou_id = implode(':', $cou_id_hierarchy);
-          }
-        }
-        $list_of_candidate_full_nested_groups[$full_candidate_cou_id] = $full_candidate_entitlement;
+       $full_candidate_cou_id = '';
+       $full_candidate_entitlement = '';
+       foreach($sub_tree['path_full_list'] as $cou_id => $cou_name) {
+         if(in_array($cou_id, $allowed_cou_ids, true)) {
+           $key = array_search($cou_id, $sub_tree['path_id_list']);
+           $cou_name_hierarchy = array_slice($sub_tree['path_full_list'], 0, $key+1);
+           $cou_name_hierarchy = array_map(function($cou_name) {
+             return urlencode($cou_name);
+           }, $cou_name_hierarchy);
+           $full_candidate_entitlement = implode(':', $cou_name_hierarchy);
+           $cou_id_hierarchy = array_slice($sub_tree['path_id_list'], 0, $key+1);
+           $full_candidate_cou_id = implode(':', $cou_id_hierarchy);
+         }
+       }
+       $list_of_candidate_full_nested_groups[$full_candidate_cou_id] = $full_candidate_entitlement;
       }
 
       SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: list_of_candidate_entitlement="
-        . var_export($list_of_candidate_nested_groups, true));
+          . var_export($list_of_candidate_nested_groups, true));
 
       // Filter the ones that are subgroups from another
       if($this->mergeEntitlements) {
-        $path_id_arr = array_keys($list_of_candidate_full_nested_groups);
-        $path_id_cp = array_keys($list_of_candidate_full_nested_groups);
-        foreach ($path_id_arr as $path_id_str) {
-          foreach ($path_id_cp as $path_id_str_cp) {
-            if (strpos($path_id_str_cp, $path_id_str) !== false
-                  && strlen($path_id_str) < strlen($path_id_str_cp)) {
-                 unset($path_id_arr[array_search($path_id_str, $path_id_arr)]);
-                 continue;
-               }
+       $path_id_arr = array_keys($list_of_candidate_full_nested_groups);
+       $path_id_cp = array_keys($list_of_candidate_full_nested_groups);
+       foreach ($path_id_arr as $path_id_str) {
+         foreach ($path_id_cp as $path_id_str_cp) {
+           if (strpos($path_id_str_cp, $path_id_str) !== false
+             && strlen($path_id_str) < strlen($path_id_str_cp)) {
+             unset($path_id_arr[array_search($path_id_str, $path_id_arr)]);
+             continue;
            }
-        }
+         }
+       }
 
-        $list_of_candidate_full_nested_groups = array_filter(
-          $list_of_candidate_full_nested_groups,
-            static function ($keys) use ($path_id_arr) {
-              return in_array($keys, $path_id_arr, true);
-            },
-          ARRAY_FILTER_USE_KEY
-        );
+       $list_of_candidate_full_nested_groups = array_filter(
+         $list_of_candidate_full_nested_groups,
+         static function ($keys) use ($path_id_arr) {
+           return in_array($keys, $path_id_arr, true);
+         },
+         ARRAY_FILTER_USE_KEY
+       );
       }
+
+      foreach($list_of_candidate_full_nested_groups as $vo_nested) {
+        $entitlement =
+          $this->urnNamespace                 // URN namespace
+          . ":group:"                         // group literal
+          . $vo_nested                        // VO
+          . ":role=member"                    // role
+          . "#" . $this->urnAuthority;        // AA FQDN
+
+        $state['Attributes']['eduPersonEntitlement'][] = $entitlement;
+      }
+
+      // Add all the parents with the default roles in the state
+      foreach ($cou_tree_structure as $sub_tree) {
+        $parent_vo = array_values($sub_tree['path_full_list'])[0];
+        foreach($this->voRolesDef as $role) {
+          $entitlement =
+            $this->urnNamespace                 // URN namespace
+            . ":group:"                         // group literal
+            . $parent_vo                        // VO
+            . ":role=" . $role                  // role
+            . "#" . $this->urnAuthority;        // AA FQDN
+
+          $state['Attributes']['eduPersonEntitlement'][] = $entitlement;
+        }
+      }
+      // Remove duplicates
+      $state['Attributes']['eduPersonEntitlement'] = array_unique($state['Attributes']['eduPersonEntitlement']);
 
       // Remove all non root non nested cou entitlements from the $state['Attributes']['eduPersonEntitlement']
       $re='/(.*):role=member(.*)/m';
@@ -746,18 +779,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             unset($replaced_entitlement, $state['Attributes']['eduPersonEntitlement'][$key]);
           }
         }
-      }
-      SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: filtered_entitlements=". var_export($filtered_entitlements, true));
-
-      foreach($list_of_candidate_full_nested_groups as $vo_nested) {
-        $entitlement =
-          $this->urnNamespace                 // URN namespace
-          . ":group:"                         // group literal
-          . $vo_nested                        // VO
-          . ":role=member"                    // role
-          . "#" . $this->urnAuthority;        // AA FQDN
-
-        $state['Attributes']['eduPersonEntitlement'][] = $entitlement;
       }
     }
 

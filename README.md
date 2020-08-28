@@ -68,7 +68,7 @@ The following authproc filter configuration options are supported:
   * `urnAuthority`: Required, a string to use as the authority of the generated `eduPersonEntitlement` URN values containing group membership and role information.
   * `registryUrls`: Required, an array of COmanage endpoints representing standard Enrollment Flow types. All the four endpoints are mandatory.
   * `urnLegacy`: Optional, a boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
-  * `mergeEntitlements`: A boolean to idicate whether the redundant `eduPersonEntitlement` will be removed from the state.
+  * `mergeEntitlements`: A boolean to idicate whether the redundant `eduPersonEntitlement` will be removed from the state. Defaults to `false`.
 
 Note: In case you need to change the format of the entitlements you need to modify the source code.
 
