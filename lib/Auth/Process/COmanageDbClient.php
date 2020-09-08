@@ -719,11 +719,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
            $full_candidate_cou_id = implode(':', $cou_id_hierarchy);
          }
        }
-       $list_of_candidate_full_nested_groups[$full_candidate_cou_id] = $full_candidate_entitlement;
+       if(!empty($full_candidate_cou_id) && !empty($full_candidate_entitlement)) {
+         $list_of_candidate_full_nested_groups[$full_candidate_cou_id] = $full_candidate_entitlement;
+       }
       }
 
-      SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: list_of_candidate_entitlement="
-          . var_export($list_of_candidate_nested_groups, true));
+      SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: list_of_candidate_full_nested_groups="
+          . var_export($list_of_candidate_full_nested_groups, true));
 
       // Filter the ones that are subgroups from another
       if($this->mergeEntitlements) {
@@ -762,6 +764,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
       // Add all the parents with the default roles in the state
       foreach ($cou_tree_structure as $sub_tree) {
         $parent_vo = array_values($sub_tree['path_full_list'])[0];
+        if (!in_array($parent_vo, $this->voWhitelist, true)) {
+          continue;
+        }
         foreach($this->voRolesDef as $role) {
           $entitlement =
             $this->urnNamespace                 // URN namespace
@@ -845,7 +850,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
         $cous = $this->getCOUs($basicInfo['id']);
         // Get the Nested COUs for the user
-        $nested_cous = $this->getCouTreeStructure($cous);
+        $nested_cous = [];
+        $this->getCouTreeStructure($cous, $nested_cous);
+
         // Define the array that will hold the member entitlements
         $members_entitlements = [];
         // Iterate over the COUs and construct the entitlements
@@ -892,7 +899,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             $this->entitlementAssemble($vo_roles, $state, $voName, "", $members_entitlements);
         } // foreach cou
 
-        //todo: here i should merge
+        // Fix nested COUs entitlements
         $this->mergeEntitlements($nested_cous, $members_entitlements, $state);
   
         // -- GENERAL PURPOSE GROUPS --
