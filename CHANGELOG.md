@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.3.3] - 2020-09-24
+
+### Added
+
+- Added `voGroupPrefix` configuration option to support multitenacy
+
+### Fixed
+
+- Fixed faulty condition in entitlement construction
+- Fixed uninitialized variables
+- Exclude parent COU default roles if the user is only a member of the `admins` group and has no affiliation with the COU
+- Minor code improvements
+
 ## [v1.3.2] - 2020-09-15
 
 ### Fixed
