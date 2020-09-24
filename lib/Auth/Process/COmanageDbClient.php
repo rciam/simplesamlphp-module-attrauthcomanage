@@ -25,6 +25,9 @@
  *               'member',
  *               'faculty',
  *            ),
+ *            'voGroupPrefix' => array(
+ *               3 => 'registry',
+ *            ),
  *            'urnNamespace' => 'urn:mace:example.eu',
  *            'urnAuthority' => 'example.eu',
  *            'mergeEntitlements' => false,
@@ -67,11 +70,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $registryUrls = array();
     private $communityIdps = array();
     private $mergeEntitlements = false;
+    private $voGroupPrefix = array();
     // If true, this filter will also generate entitlements using the
     // legacy URN format
     private $urnLegacy = false;
     private $voRoles = array();
     private $voRolesDef = array();
+    private $coGroupMemberships = array();
 
     private $_basicInfoQuery = 'select'
         . ' person.id,'
@@ -114,37 +119,32 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' FROM cm_co_people person'
         . ' LEFT OUTER JOIN cm_names name'
         . ' ON person.id = name.co_person_id'
-        . ' LEFT OUTER JOIN cm_email_addresses mail'
-        . ' ON person.id = mail.co_person_id'
-        . ' LEFT OUTER JOIN cm_co_org_identity_links link'
-        . ' ON person.id = link.co_person_id'
-        . ' LEFT OUTER JOIN cm_org_identities org'
-        . ' ON link.org_identity_id = org.id'
-        . ' LEFT OUTER JOIN cm_identifiers ident'
-        . ' ON person.id = ident.co_person_id'
-        . ' WHERE'
-        . ' NOT person.deleted'
         . ' AND person.co_person_id IS NULL'
         . ' AND NOT name.deleted'
         . ' AND name.name_id IS NULL'
-        . ' AND name.type = \'official\''
+        . ' LEFT OUTER JOIN cm_email_addresses mail'
+        . ' ON person.id = mail.co_person_id'
         . ' AND NOT mail.deleted'
         . ' AND mail.email_address_id IS NULL'
-        . ' AND mail.type = \'official\''
+        . ' LEFT OUTER JOIN cm_co_org_identity_links link'
+        . ' ON person.id = link.co_person_id'
         . ' AND NOT link.deleted'
         . ' AND link.co_org_identity_link_id is null'
+        . ' LEFT OUTER JOIN cm_org_identities org'
+        . ' ON link.org_identity_id = org.id'
         . ' AND NOT org.deleted'
         . ' AND org.org_identity_id is null'
-        . ' AND NOT ident.deleted'
-        . ' AND ident.type = \'uid\''
+        . ' LEFT OUTER JOIN cm_identifiers ident'
+        . ' ON person.id = ident.co_person_id'
         . ' AND ident.identifier_id IS NULL'
-        . ' AND person.id = :coPersonId'
+        . ' AND NOT ident.deleted'
+        . ' WHERE NOT person.deleted'
         . ' AND name.type = \'official\''
+        . ' AND ident.type = \'uid\''
+        . ' AND person.id = :coPersonId'
         . ' AND name.primary_name = true'
-        . ' AND link.co_org_identity_link_id IS NULL'
-        . ' AND NOT org.deleted'
-        . ' AND org.org_identity_id is NULL'
-        . ' ORDER BY link.org_identity_id ASC LIMIT 1';
+        . ' ORDER BY link.org_identity_id ASC'
+        . ' LIMIT 1;';
 
     private $certQuery = 'SELECT'
         . ' DISTINCT(cert.subject)'
@@ -180,6 +180,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             throw new SimpleSAML_Error_Exception(
                 "attrauthcomanage configuration error: 'coId' not an integer number");
         }
+        // XXX Assign the default value to the CO ID variable. If CO Selection module is enabled this will
+        // XXX be overwritten with the one chosen by the user
         $this->coId = $config['coId'];
 
         // urnNamespace config
@@ -191,8 +193,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         $this->urnNamespace = $config['urnNamespace'];
 
         // voRoles config
-        if (!array_key_exists('voRoles', $config) && !is_string($config['voRoles'])) {
-          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(string required)");
+        if (!array_key_exists('voRoles', $config) && !is_array($config['voRoles'])) {
+          SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(array required)");
           throw new SimpleSAML_Error_Exception(
             "attrauthcomanage configuration error: 'voRoles' not specified");
         }
@@ -200,6 +202,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         // Get a copy of teh default Roles before enriching with COmanage roles
         $voRolesObject = new ArrayObject($config['voRoles']);
         $this->voRolesDef = $voRolesObject->getArrayCopy();
+
+        // voGroupPrefix config
+        if (array_key_exists('voGroupPrefix', $config) && is_array($config['voGroupPrefix'])) {
+          SimpleSAML_Logger::debug("[attrauthcomanage] Configuration error: 'voGroupPrefix' not specified or wrong format(array required)");
+          $this->voGroupPrefix = $config['voGroupPrefix'];
+        }
 
         // urnAuthority config
         if (!array_key_exists('urnAuthority', $config) && !is_string($config['urnAuthority'])) {
@@ -306,6 +314,11 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 throw new SimpleSAML_Error_Exception(
                     "attrauthcomanage configuration error: 'userIdAttribute' not available");
             }
+            // XXX finalize the configurations now that we have the final CO Id value
+            $this->voGroupPrefix = !empty($this->voGroupPrefix[$this->coId])
+                                   ? $this->voGroupPrefix[$this->coId]
+                                   : $this->constructGroupPrefix($this->coId);
+
             unset($state['Attributes']['uid']);
             $orgId = $state['Attributes'][$this->userIdAttribute][0];
             SimpleSAML_Logger::debug("[attrauthcomanage] process: orgId=" . var_export($orgId, true));
@@ -514,6 +527,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             'co_id'        => array($co_id, PDO::PARAM_INT),
             'co_person_id' => array($co_person_id, PDO::PARAM_INT),
         );
+        $result = array();
         $stmt = $db->read($membership_query, $queryParams);
         if ($stmt->execute()) {
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -522,7 +536,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             SimpleSAML_Logger::debug("[attrauthcomanage] getMemberships: result="
                 . var_export($result, true)
             );
-            return $result;
         } else {
             throw new Exception('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
         }
@@ -567,13 +580,17 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
           if ($stmt->execute()) {
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
               if (strpos($row['path'], ':') !== false) {
+                $path_group_list = explode(':', $row['path']);
+                $path_group_list = array_map(function($group){
+                  return urlencode($group);
+                }, $path_group_list);
                 $nested_cous_paths += [
                   $cou['cou_id'] => [
-                    'path'           => $row['path'],
+                    'path'           => implode(':', $path_group_list),
                     'path_id_list'   => explode(':', $row['path_id']),
                     'path_full_list' => array_combine(
                       explode(':', $row['path_id']), // keys
-                      explode(':', $row['path'])     // values
+                      $path_group_list               // values
                     ),
                   ],
                 ];
@@ -594,13 +611,18 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
      * @param string $group_name
      * @param array $memberEntitlements
      * @param integer $cou_id
-     * @todo  Old style entitlements to be removed
+     * @todo Remove old style entitlements
+     * @todo Remove $group_name variable
      */
     private function couEntitlementAssemble($personRoles, &$state, $vo_name, $group_name = "", &$memberEntitlements = null, $cou_id = null)
     {
       foreach ($personRoles as $key => $role) {
         // We need this to filter the cou_id or any other irrelevant information
         if (is_string($key) && $key === 'cou_id') {
+          continue;
+        }
+        // Do not create entitlements for the admins group here.
+        if (strpos($vo_name, ':admins') !== false) {
           continue;
         }
         if (!empty($role) && is_array($role) && count($role) > 0) {
@@ -651,7 +673,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
       SimpleSAML_Logger::debug("[attrauthcomanage] mergeEntitlements: orphan_memberships="
         . var_export($orphan_memberships, true));
 
-      if (empty($member_entitlements) || empty($cou_tree_structure)) {
+      if (empty($cou_tree_structure)) {
         return;
       }
 
@@ -692,12 +714,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
               if (in_array($cou_id, $allowed_cou_ids, true)) {
                   $key = array_search($cou_id, $sub_tree['path_id_list']);
                   $cou_name_hierarchy = array_slice($sub_tree['path_full_list'], 0, $key + 1);
-                  $cou_name_hierarchy = array_map(
-                      function ($cou_name) {
-                          return urlencode($cou_name);
-                      },
-                      $cou_name_hierarchy
-                  );
                   $full_candidate_entitlement = implode(':', $cou_name_hierarchy);
                   $cou_id_hierarchy = array_slice($sub_tree['path_id_list'], 0, $key + 1);
                   $full_candidate_cou_id = implode(':', $cou_id_hierarchy);
@@ -734,7 +750,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
           );
       }
 
-      // XXX $vo_nested is already urlencoded here
       foreach ($list_of_candidate_full_nested_groups as $cou_ids => $vo_nested) {
           $entitlement =
               $this->urnNamespace                 // URN namespace
@@ -762,19 +777,29 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
       }
 
       // XXX Add all the parents with the default roles in the state
-      foreach ($cou_tree_structure as $sub_tree) {
+      foreach ($cou_tree_structure as $cou_id => $sub_tree) {
           // XXX Split the full path and encode each part.
           $parent_vo = array_values($sub_tree['path_full_list'])[0];
           if (!in_array($parent_vo, $this->voWhitelist, true)) {
               continue;
           }
+          // XXX Also exclude the ones that are admin groups
+          $cou_exist = array_filter($this->coGroupMemberships, static function($membership) use ($cou_id){
+            return (!empty($membership['cou_id'])
+                    && (integer)$membership['cou_id'] === $cou_id
+                    && (!empty($membership['affiliation']) || !empty($membership['title'])));
+          });
+          if (empty($cou_exist)) {
+            continue;
+          }
+
           foreach ($this->voRolesDef as $role) {
               $entitlement =
-                  $this->urnNamespace                 // URN namespace
-                  . ":group:"                         // group literal
-                  . urlencode($parent_vo)             // VO
-                  . ":role=" . $role                  // role
-                  . "#" . $this->urnAuthority;        // AA FQDN
+                  $this->urnNamespace              // URN namespace
+                  . ":group:"                      // group literal
+                  . $parent_vo                     // VO
+                  . ":role=" . $role               // role
+                  . "#" . $this->urnAuthority;     // AA FQDN
 
               $state['Attributes']['eduPersonEntitlement'][] = $entitlement;
           }
@@ -795,16 +820,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
               if (array_key_exists($membership['cou_id'], $cou_tree_structure)) {
                   $vo_name = $cou_tree_structure[$membership['cou_id']]['path'] . ':admins';
               }
-              $vo_name_parts = explode(':', $vo_name);
-              $vo_name_parts = array_map(
-                  function ($value) {
-                      return urlencode($value);
-                  },
-                  $vo_name_parts
-              );
-              // XXX Now reconstruct
               foreach ($membership_roles as $role) {
-                  $vo_name = implode(':', $vo_name_parts);
                   $entitlement =
                       $this->urnNamespace                 // URN namespace
                       . ":group:"                         // group literal
@@ -844,7 +860,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private function retrieveCOPersonData(&$state)
     {
         if (isset($state['basicInfo'])) {
-            SimpleSAML_Logger::info("[attrauthcomanage] retrieveCOPersonData: " . var_export($state['basicInfo'], true));
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: " . var_export($state['basicInfo'], true));
             $basicInfo = $state['basicInfo'];
         } else {
             $basicInfo = $this->_getBasicInfo($state['Attributes'][$this->userIdAttribute][0]);
@@ -894,9 +910,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
 
         // XXX Get all the memberships from the the CO for the user
-        $co_memberships = $this->getMemberships($this->coId, $basicInfo['id']);
+        $this->coGroupMemberships = $this->getMemberships($this->coId, $basicInfo['id']);
         // XXX if this is empty return
-        if (empty($co_memberships)) {
+        if (empty($this->coGroupMemberships)) {
             if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
                 $state['Attributes']['eduPersonEntitlement'] = array();
             }
@@ -904,7 +920,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
         // XXX Extract the group memberships
         $group_memberships = array_filter(
-            $co_memberships,
+            $this->coGroupMemberships,
             static function ($value) {
                 if (is_null($value['cou_id'])) {
                     return $value;
@@ -917,28 +933,28 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         // TODO: Make some more clearance here. Remove also thn VOs that should have an entitlement. Be carefull about multi tenacy
         // TODO: This needs the voWhitelist which should be a configuration per CO
         // XXX This will make things simpler and faster below
-        $co_memberships = array_filter(
-            $co_memberships,
+        $cou_memberships = array_filter(
+            $this->coGroupMemberships,
             static function ($value) {
                 if (!is_null($value['cou_id'])) {
                     return $value;
                 }
             }
         );
-        SimpleSAML_Logger::debug("[attrauthcomanage] co_memberships=" . var_export($co_memberships, true));
+        SimpleSAML_Logger::debug("[attrauthcomanage] cou_memberships=" . var_export($cou_memberships, true));
 
 
         // XXX Construct the plain group Entitlements
-        $this->groupEntitlemeAssemble($state, $group_memberships, $coId, $voPrefix);
+        $this->groupEntitlemeAssemble($state, $group_memberships, $this->voGroupPrefix);
 
         // XXX Get the Nested COUs for the user
         $nested_cous = [];
-        $this->getCouTreeStructure($co_memberships, $nested_cous);
+        $this->getCouTreeStructure($cou_memberships, $nested_cous);
 
         // Define the array that will hold the member entitlements
         $members_entitlements = [];
         // Iterate over the COUs and construct the entitlements
-        foreach ($co_memberships as $idx => $cou) {
+        foreach ($cou_memberships as $idx => $cou) {
             if (empty($cou['group_name'])) {
                 continue;
             }
@@ -951,7 +967,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     && strpos($cou['group_name'], ':admins') === false) {
                     // XXX Remove a child COU that has no parent in the voWhitelist OR
                     // XXX Remove if it does not represent an admins group AND
-                    unset($co_memberships[$idx]);
+                    unset($cou_memberships[$idx]);
                     continue;
                 }
                 if (!in_array($parent_cou_name, $this->voWhitelist, true)
@@ -996,7 +1012,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             // Get the admins group if exists
             $cou_admins_group = array_values(
                 array_filter(
-                    $co_memberships,
+                    $cou_memberships,
                     static function ($value) use ($voName) {
                         if ($value['group_name'] === ($voName . ':admins')) {
                             return $value;
@@ -1018,14 +1034,14 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             $vo_roles['cou_id'] = $cou['cou_id'];
             // todo: Move upper to voRoles Create function
 
-            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData voRoles[{$voName}]=". var_export($vo_roles, true));
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData voRoles[{$voName}]=" . var_export($vo_roles, true));
             $this->couEntitlementAssemble($vo_roles, $state, $voName, "", $members_entitlements);
             // XXX Remove the ones already done
-            unset($co_memberships[$idx]);
+            unset($cou_memberships[$idx]);
         } // foreach cou
 
         // Fix nested COUs entitlements
-        $this->mergeEntitlements($nested_cous, $members_entitlements, $state, $co_memberships);
+        $this->mergeEntitlements($nested_cous, $members_entitlements, $state, $cou_memberships);
 
         if (!empty($state['Attributes']['eduPersonEntitlement'])) {
             SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData AFTER: eduPersonEntitlement=" . var_export($state['Attributes']['eduPersonEntitlement'], true));
@@ -1036,12 +1052,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
      * Construct the plain group entitlements. No nesting supported.
      * @param array $state
      * @param array $memberships_groups
-     * @param integer $co_id
-     * @param string $voPrefix
-     * @todo Replace voPrefix with a configuration variable
-     * @todo Replace $co_id with a configuration variable
+     * @param string $groupPrefix
      */
-    private function groupEntitlemeAssemble(&$state, $memberships_groups, $co_id, $voPrefix)
+    private function groupEntitlemeAssemble(&$state, $memberships_groups, $groupPrefix)
     {
         if (empty($memberships_groups)) {
             return;
@@ -1057,23 +1070,22 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
                 $state['Attributes']['eduPersonEntitlement'] = array();
             }
-            // todo: Move this to configuration
-            $groupPrefix = ($co_id === 5) ? $voPrefix . 'group:': $voPrefix . 'registry:';
+
             foreach ($roles as $role) {
                 $state['Attributes']['eduPersonEntitlement'][] =
-                    $this->urnNamespace          // URN namespace
-                    . ":group:registry:"         // URN namespace
-                    . urlencode($group['group_name'])      // VO
-                    . ":role=" . $role             // role
-                    . "#" . $this->urnAuthority; // AA FQDN
+                    $this->urnNamespace                // URN namespace
+                    . ":group:" . $groupPrefix . ":"   // Group Prefix
+                    . urlencode($group['group_name'])  // VO
+                    . ":role=" . $role                 // role
+                    . "#" . $this->urnAuthority;       // AA FQDN
                 // Enable legacy URN syntax for compatibility reasons?
                 if ($this->urnLegacy) {
                     $state['Attributes']['eduPersonEntitlement'][] =
-                        $this->urnNamespace          // URN namespace
-                        . ':' . $this->urnAuthority  // AA FQDN
-                        . ':' . $role                // role
-                        . "@"                        // VO delimiter
-                        . urlencode($group['group_name']);     // VO
+                        $this->urnNamespace                  // URN namespace
+                        . ':' . $this->urnAuthority          // AA FQDN
+                        . ':' . $role                        // role
+                        . "@"                                // VO delimiter
+                        . urlencode($group['group_name']);   // VO
                 }
             }
         }
@@ -1093,6 +1105,32 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         return array_values($hierarchy['path_full_list'])[0];
       }
       return '';
+    }
+
+    /**
+     * Construct the Group Prefix for COmanage Plain Groups as defined in AARC
+     * @param integer $co_id
+     * @return string
+     */
+    private function constructGroupPrefix($co_id) {
+      $co_query ="select name from cm_cos where id=:co_id and status='A';";
+
+      $db = SimpleSAML\Database::getInstance();
+      // Strip the cou_id from the unnecessary characters
+      $queryParams = array(
+        'co_id' => array($co_id, PDO::PARAM_INT),
+      );
+      $stmt = $db->read($co_query, $queryParams);
+      $co_name = '';
+      if ($stmt->execute()) {
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+          $co_name = urlencode($row['name']);
+        }
+      } else {
+        throw new \RuntimeException('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
+      }
+      SimpleSAML_Logger::debug("[attrauthcomanage] constructGroupPrefix: " . var_export($co_name . ":group", true));
+      return $co_name . ':group';
     }
 
     /**
