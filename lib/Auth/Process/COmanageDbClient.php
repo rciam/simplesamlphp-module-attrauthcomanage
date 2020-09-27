@@ -107,42 +107,41 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' and not ident.deleted'
         . ' and ident.identifier_id is null';
 
-    private $profileQuery = 'SELECT'
-        . ' name.given,'
-        . ' name.family,'
-        . ' mail.mail,'
-        . ' org.affiliation,'
-        . ' org.o,'
-        . ' ident.identifier'
-        . ' FROM cm_co_people person'
-        . ' LEFT OUTER JOIN cm_names name'
-        . ' ON person.id = name.co_person_id'
-        . ' AND person.co_person_id IS NULL'
-        . ' AND NOT name.deleted'
-        . ' AND name.name_id IS NULL'
-        . ' LEFT OUTER JOIN cm_email_addresses mail'
-        . ' ON person.id = mail.co_person_id'
-        . ' AND NOT mail.deleted'
-        . ' AND mail.email_address_id IS NULL'
-        . ' LEFT OUTER JOIN cm_co_org_identity_links link'
-        . ' ON person.id = link.co_person_id'
-        . ' AND NOT link.deleted'
-        . ' AND link.co_org_identity_link_id is null'
-        . ' LEFT OUTER JOIN cm_org_identities org'
-        . ' ON link.org_identity_id = org.id'
-        . ' AND NOT org.deleted'
-        . ' AND org.org_identity_id is null'
-        . ' LEFT OUTER JOIN cm_identifiers ident'
-        . ' ON person.id = ident.co_person_id'
-        . ' AND ident.identifier_id IS NULL'
-        . ' AND NOT ident.deleted'
-        . ' WHERE NOT person.deleted'
-        . ' AND name.type = \'official\''
-        . ' AND ident.type = \'uid\''
-        . ' AND person.id = :coPersonId'
-        . ' AND name.primary_name = true'
-        . ' ORDER BY link.org_identity_id ASC'
-        . ' LIMIT 1;';
+    private $profileQuery = "SELECT string_agg(DISTINCT name.given, ',')       AS name,"
+        . " string_agg(DISTINCT name.family, ',')      AS family,"
+        . " string_agg(mail.id::text, ',')             AS mail_id,"
+        . " string_agg(mail.mail, ',')                 AS mail,"
+        . " string_agg(mail.verified::text, ',')       AS verified,"
+        . " string_agg(DISTINCT ident.identifier, ',') AS identifier,"
+        . " (select string_agg(coi.affiliation || '@' || coi.o, ',') as eduPersonScopedAffiliation"
+        . " from cm_org_identities as coi"
+        . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id and"
+        . " not coi.deleted and not ccoil.deleted and"
+        . " coi.o is not null and coi.o != '' and"
+        . " coi.affiliation is not null and coi.affiliation != ''"
+        . " where ccoil.co_person_id = :coPersonId"
+        . " and coi.o is not null"
+        . " and coi.affiliation is not null)"
+        . " FROM cm_co_people person"
+        . " LEFT OUTER JOIN cm_names name"
+        . " ON person.id = name.co_person_id"
+        . " AND person.co_person_id IS NULL"
+        . " AND NOT name.deleted"
+        . " AND name.name_id IS NULL"
+        . " LEFT OUTER JOIN cm_email_addresses mail"
+        . " ON person.id = mail.co_person_id"
+        . " AND NOT mail.deleted"
+        . " AND mail.email_address_id IS NULL"
+        . " LEFT OUTER JOIN cm_identifiers ident"
+        . " ON person.id = ident.co_person_id"
+        . " AND ident.identifier_id IS NULL"
+        . " AND NOT ident.deleted"
+        . " WHERE NOT person.deleted"
+        . " AND name.type = 'official'"
+        . " AND ident.type = 'uid'"
+        . " AND person.id = :coPersonId"
+        . " AND name.primary_name = true"
+        . " GROUP BY person.id;";
 
     private $certQuery = 'SELECT'
         . ' DISTINCT(cert.subject)'
@@ -413,6 +412,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         return null;
     }
 
+    /**
+     * Execute the profileQuery and construct the result set
+     *
+     * @param integer $personId
+     * @return array|null
+     * @throws Exception
+     */
     private function getProfile($personId)
     {
         SimpleSAML_Logger::debug("[attrauthcomanage] getProfile: personId="
@@ -436,6 +442,75 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
 
         return null;
+    }
+
+    /**
+     * Get and construct the profile of the COPerson.
+     * The profile includes the attributes:
+     * given, sn, mail, voPersonVerifiedEmail, eduPersonScopedAffiliation, uid
+     *
+     * @param array &$state
+     * @param integer $co_person_id
+     * @return boolean
+     * @throws Exception
+     */
+    private function constructProfile(&$state, $co_person_id)
+    {
+        $profile = $this->getProfile($co_person_id);
+        if (empty($profile)) {
+            return false;
+        }
+        foreach ($profile as $attributes) {
+            if (!empty($attributes['given'])) {
+                $state['Attributes']['givenName'] = array($attributes['given']);
+            }
+            if (!empty($attributes['family'])) {
+                $state['Attributes']['sn'] = array($attributes['family']);
+            }
+            if (!empty($attributes['mail'])) {
+                // Sort the mails by their row unique id(lowest to highest
+                $mail_list = array_combine(
+                  explode(',', $attributes['mail_id']),
+                  explode(',', $attributes['mail'])
+                );
+                if (ksort($mail_list)) {
+                    $state['Attributes']['mail'] = array(array_shift(($mail_list)));
+                } else {
+                    // Sorting failed return the first available
+                    $state['Attributes']['mail'] = array(
+                      explode(',', $attributes['mail'])[0]
+                    );
+                }
+                unset($mail_list);
+                // XXX for the voPersonVerifiedEmail attribute we need an array with all the verified emails
+                if (!empty($attributes['verified'])) {
+                    $mail_list = array_combine(
+                      explode(',', $attributes['mail']),
+                      explode(',', $attributes['verified'])
+                    );
+                    $verified_mail_list = array_filter(
+                      $mail_list,
+                      static function ($verified) {
+                          return filter_var($verified, FILTER_VALIDATE_BOOLEAN) === true;
+                      }
+                    );
+                    if (!empty($verified_mail_list)) {
+                        $state['Attributes']['voPersonVerifiedEmail'] = array_keys($verified_mail_list);
+                    }
+                }
+            }
+            if (!empty($attributes['edupersonscopedaffiliation'])) {
+                $state['Attributes']['eduPersonScopedAffiliation'] = explode(
+                  ',',
+                  $attributes['edupersonscopedaffiliation']
+                );
+            }
+            if (!empty($attributes['identifier'])) {
+                $state['Attributes']['uid'] = array($attributes['identifier']);
+            }
+        }
+
+        return true;
     }
 
     private function getCerts($personId)
@@ -558,36 +633,41 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
         $db = SimpleSAML\Database::getInstance();
         foreach ($cous as $cou) {
-          if (empty($cou['group_name']) || empty($cou['cou_id'])) {
-            continue;
-          }
-          // Strip the cou_id from the unnecessary characters
-          $queryParams = array(
-            'cou_id' => array($cou['cou_id'], PDO::PARAM_INT),
-          );
-          $stmt = $db->read($recursive_query, $queryParams);
-          if ($stmt->execute()) {
-            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-              if (strpos($row['path'], ':') !== false) {
-                $path_group_list = explode(':', $row['path']);
-                $path_group_list = array_map(function($group){
-                  return urlencode($group);
-                }, $path_group_list);
-                $nested_cous_paths += [
-                  $cou['cou_id'] => [
-                    'path'           => implode(':', $path_group_list),
-                    'path_id_list'   => explode(':', $row['path_id']),
-                    'path_full_list' => array_combine(
-                      explode(':', $row['path_id']), // keys
-                      $path_group_list               // values
-                    ),
-                  ],
-                ];
-              }
+            if (empty($cou['group_name']) || empty($cou['cou_id'])) {
+                continue;
             }
-          } else {
-            throw new \RuntimeException('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
-          }
+            // Strip the cou_id from the unnecessary characters
+            $queryParams = array(
+              'cou_id' => array($cou['cou_id'], PDO::PARAM_INT),
+            );
+            $stmt        = $db->read($recursive_query, $queryParams);
+            if ($stmt->execute()) {
+                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    if (strpos($row['path'], ':') !== false) {
+                        $path_group_list   = explode(':', $row['path']);
+                        $path_group_list   = array_map(
+                          function ($group) {
+                              return urlencode($group);
+                          },
+                          $path_group_list
+                        );
+                        $nested_cous_paths += [
+                          $cou['cou_id'] => [
+                            'path'           => implode(':', $path_group_list),
+                            'path_id_list'   => explode(':', $row['path_id']),
+                            'path_full_list' => array_combine(
+                              explode(':', $row['path_id']), // keys
+                              $path_group_list               // values
+                            ),
+                          ],
+                        ];
+                    }
+                }
+            } else {
+                throw new \RuntimeException(
+                  'Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true)
+                );
+            }
         }
         SimpleSAML_Logger::debug("[attrauthcomanage] getCouTreeStructure: nested_cous_paths=" . var_export($nested_cous_paths, true));
     }
@@ -862,29 +942,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
         $state['Attributes'][$this->userIdAttribute] = array($loginId);
         $state['UserID'] = $loginId;
-        $profile = $this->getProfile($basicInfo['id']);
-        if (empty($profile)) {
-            return;
+
+        // XXX Construct the User's profile and add into the state
+        if (!$this->constructProfile($state, $basicInfo['id'])) {
+          return;
         }
-        foreach ($profile as $attributes) {
-            if (!empty($attributes['given'])) {
-                $state['Attributes']['givenName'] = array($attributes['given']);
-            }
-            if (!empty($attributes['family'])) {
-                $state['Attributes']['sn'] = array($attributes['family']);
-            }
-            if (!empty($attributes['mail'])) {
-                $state['Attributes']['mail'] = array($attributes['mail']);
-            }
-            if (!empty($attributes['affiliation']) && !empty($attributes['o'])) {
-                $state['Attributes']['eduPersonScopedAffiliation'] = array(
-                    $attributes['affiliation'] . "@" . $attributes['o'],
-                );
-            }
-            if (!empty($attributes['identifier'])) {
-                $state['Attributes']['uid'] = array($attributes['identifier']);
-            }
-        }
+
+        // XXX Get Certificate information
         $certs = $this->getCerts($basicInfo['id']);
         foreach ($certs as $cert) {
             if (empty($cert['subject'])) {
