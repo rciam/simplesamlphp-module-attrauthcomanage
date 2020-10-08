@@ -13,6 +13,8 @@
  *       '60' => array(
  *            'class' => 'attrauthcomanage:COmanageDbClient',
  *            'coId' => 2,
+ *            'coOrgIdType' => array('epuid'),
+ *            'coUserIdType' => 'epuid',
  *            'userIdAttribute' => 'eduPersonUniqueId',
  *            'voWhitelist' => array(
  *               'vo.example.com',
@@ -57,6 +59,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $coId;
 
     private $coUserIdType = 'epuid';
+    private $coOrgIdType = array('epuid');
 
     private $userIdAttribute = 'eduPersonUniqueId';
 
@@ -76,7 +79,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $voRolesDef = array();
     private $coGroupMemberships = array();
 
-    private $_basicInfoQuery = 'select'
+    private $basicInfoQuery = 'select'
         . ' person.id,'
         . ' person.status,'
         . ' person.co_id'
@@ -99,7 +102,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' and ident.identifier_id is null'
         . ' and ident.identifier = :coPersonOrgId';
 
-    private $_loginIdQuery = 'select ident.identifier'
+    private $coPersonIdentQuery = 'select ident.identifier'
         . ' from cm_identifiers ident'
         . ' where'
         . ' ident.co_person_id = :coPersonId'
@@ -142,6 +145,22 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . " AND person.id = :coPersonId"
         . " AND name.primary_name = true"
         . " GROUP BY person.id;";
+
+    private $orgIdIdentQuery = 'select ident.type, ident.identifier, ident.login, ident.org_identity_id'
+        . ' from cm_identifiers as ident'
+        . ' inner join cm_org_identities coi on ident.org_identity_id = coi.id'
+        . ' and not ident.deleted'
+        . ' and ident.identifier_id is null'
+        . ' and not coi.deleted and coi.org_identity_id is null'
+        . ' inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id'
+        . ' and not ccoil.deleted'
+        . ' and ccoil.co_org_identity_link_id is null'
+        . ' inner join cm_co_people ccp on ccoil.co_person_id = ccp.id'
+        . ' and not ccp.deleted'
+        . ' and ccp.co_person_id is null'
+        . ' where ident.type in (:coOrgIdType)'
+        . ':isLogin' // XXX This is a placeholder for the whole line
+        . ' and ccp.id = :coPersonId';
 
     private $certQuery = 'SELECT'
         . ' DISTINCT(cert.subject)'
@@ -245,6 +264,15 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             $this->coUserIdType = $config['coUserIdType'];
         }
 
+        if (array_key_exists('coOrgIdType', $config)) {
+            if (!is_array($config['coOrgIdType'])) {
+                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coOrgIdType' not an array literal");
+                throw new SimpleSAML_Error_Exception(
+                  "attrauthcomanage configuration error: 'coOrgIdType' not an array literal");
+            }
+            $this->coOrgIdType = $config['coOrgIdType'];
+        }
+
         if (array_key_exists('userIdAttribute', $config)) {
             if (!is_string($config['userIdAttribute'])) {
                 SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not a string literal");
@@ -319,7 +347,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             unset($state['Attributes']['uid']);
             $orgId = $state['Attributes'][$this->userIdAttribute][0];
             SimpleSAML_Logger::debug("[attrauthcomanage] process: orgId=" . var_export($orgId, true));
-            $basicInfo = $this->_getBasicInfo($orgId);
+            $basicInfo = $this->getBasicInfo($orgId);
             SimpleSAML_Logger::debug("[attrauthcomanage] process: basicInfo=". var_export($basicInfo, true));
             if (!empty($basicInfo)) {
                 $state['basicInfo'] = $basicInfo;
@@ -364,9 +392,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['sign_up'], $params);
     }
 
-    private function _getBasicInfo($orgId)
+    private function getBasicInfo($orgId)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] _getBasicInfo: orgId="
+        SimpleSAML_Logger::debug("[attrauthcomanage] getBasicInfo: orgId="
             . var_export($orgId, true));
 
         $db = SimpleSAML\Database::getInstance();
@@ -374,10 +402,10 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             'coId'          => array($this->coId, PDO::PARAM_INT),
             'coPersonOrgId' => array($orgId, PDO::PARAM_STR),
         );
-        $stmt = $db->read($this->_basicInfoQuery, $queryParams);
+        $stmt = $db->read($this->basicInfoQuery, $queryParams);
         if ($stmt->execute()) {
             if ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                SimpleSAML_Logger::debug("[attrauthcomanage] _getBasicInfo: result="
+                SimpleSAML_Logger::debug("[attrauthcomanage] getBasicInfo: result="
                     . var_export($result, true));
                return $result;
             }
@@ -388,20 +416,28 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         return null;
     }
 
-    private function _getLoginId($personId)
+    /**
+     * @param integer $personId The ID of the CO Person in COmanage
+     * @param string $identifier_type The type of identifier
+     *
+     * @return mixed|null
+     * @throws Exception
+     * @todo add the Identifier types in the dictionary
+     */
+    private function getCoPersonIdentifier($personId, $identifier_type)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] _getLoginId: personId="
+        SimpleSAML_Logger::debug("[attrauthcomanage] getCoPersonIdentifier: personId="
             . var_export($personId, true));
 
         $db = SimpleSAML\Database::getInstance();
         $queryParams = array(
             'coPersonId'     => array($personId, PDO::PARAM_INT),
-            'coPersonIdType' => array($this->coUserIdType, PDO::PARAM_STR),
+            'coPersonIdType' => array($identifier_type, PDO::PARAM_STR),
         );
-        $stmt = $db->read($this->_loginIdQuery, $queryParams);
+        $stmt = $db->read($this->coPersonIdentQuery, $queryParams);
         if ($stmt->execute()) {
             if ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                SimpleSAML_Logger::debug("[attrauthcomanage] _getLoginId: result="
+                SimpleSAML_Logger::debug("[attrauthcomanage] getCoPersonIdentifier: result="
                     . var_export($result, true));
                return $result['identifier'];
             }
@@ -410,6 +446,75 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
 
         return null;
+    }
+
+    /**
+     * Fetch all the Identifiers linked to OrgIdentities. Define whether these identifiers are authenticators or not
+     *
+     * @param   string  $personId   The CO Person ID
+     * @param   array   $orgIdentTypeList
+     * @param   bool    $isLogin   , true, false or null are allowed
+     *
+     * @return array|null Return an array of identifiers, column headers [ident.type, ident.identifier, ident.login, ident.org_identity_id]
+     * @throws Exception
+     */
+    private function getOrgIdentifiers($personId, $orgIdentTypeList, $isLogin=null)
+    {
+        SimpleSAML_Logger::debug('[attrauthcomanage] getOrgIdentifiers: personId=' . var_export($personId, true));
+
+        $db = SimpleSAML\Database::getInstance();
+        $this->orgIdIdentQuery = str_replace(':coOrgIdType',
+                                              "'" . implode("','", $orgIdentTypeList) . "'",
+                                              $this->orgIdIdentQuery);
+        if(is_null($isLogin)) {
+            $isLoginConditionStr = '';
+        } else {
+            $isLoginCondition = ($isLogin) ? 'true' : 'false';
+            $isLoginConditionStr = ' and ident.login=' . $isLoginCondition;
+        }
+
+        $this->orgIdIdentQuery = str_replace(':isLogin',
+                                              $isLoginConditionStr,
+                                              $this->orgIdIdentQuery);
+        $queryParams = array(
+          'coPersonId' => array($personId, PDO::PARAM_INT),
+        );
+        $stmt = $db->read($this->orgIdIdentQuery, $queryParams);
+
+        if ($stmt->execute()) {
+            if ($result = $stmt->fetchall(PDO::FETCH_GROUP|PDO::FETCH_ASSOC)) {
+                SimpleSAML_Logger::debug("[attrauthcomanage] getOrgIdentifiers: result="
+                                         . var_export($result, true));
+                return $result;
+            }
+        } else {
+            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+        }
+        return null;
+    }
+
+    /**
+     * Check whether the identifier fetched from the IdP is available in the list of my Identifiers
+     * and marked as a login identifier
+     *
+     * @param string $idpIdent Identifier provided by the Identity Provider
+     * @param array $identsList List of OrgIdentity Identifiers
+     *
+     * @return bool
+     */
+    private function isIdpIdentLogin($idpIdent, $identsList) {
+        if( empty($identsList) || empty($idpIdent)) {
+            return false;
+        }
+        foreach ($identsList as $identifierTypes) {
+            foreach($identifierTypes as $ident) {
+                if( $ident['identifier'] === $idpIdent
+                  && $ident['login']) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -928,18 +1033,31 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
      */
     private function retrieveCOPersonData(&$state)
     {
+        $orgId = $state['Attributes'][$this->userIdAttribute][0];
         if (isset($state['basicInfo'])) {
             SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: " . var_export($state['basicInfo'], true));
             $basicInfo = $state['basicInfo'];
         } else {
-            $basicInfo = $this->_getBasicInfo($state['Attributes'][$this->userIdAttribute][0]);
+            $basicInfo = $this->getBasicInfo($orgId);
         }
-        $loginId = $this->_getLoginId($basicInfo['id']);
-        SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: loginId=" . var_export($loginId, true));
-        if ($loginId === null) {
+        // XXX Check if the Identifier created by UserId module is a login Identifier
+        // XXX Scenario: The user ID module creates an Identifier. We must check that this identifier is enlisted
+        // XXX in the list of available OrgIdentities of the CO Person and is a valid authenticator.
+        // XXX Upon success we return the Identifier of the COPerson
+        $orgIdentifiers = $this->getOrgIdentifiers($basicInfo['id'], $this->coOrgIdType, true);
+        SimpleSAML_Logger::debug('[attrauthcomanage] process: orgIdentifiers=' . var_export($orgIdentifiers, true));
+        if (!empty($orgIdentifiers)) {
+            $state['orgIndentifiersList'] = $orgIdentifiers;
+        }
+        if (!$this->isIdpIdentLogin($orgId, $orgIdentifiers)) {
             // Normally, this should not happen
-            throw new Exception('There is a problem with your EGI account. Please contact support for further assistance.');
+            $err_msg = 'The identifier <b>- ' . $orgId . ' -</b><br>is not present in your EGI account or is not a valid authenticator.<br>Please contact support for further assistance.';
+            throw new Exception($err_msg);
         }
+
+        $loginId = $this->getCoPersonIdentifier($basicInfo['id'], $this->coUserIdType);
+        SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: loginId=" . var_export($loginId, true));
+
         $state['Attributes'][$this->userIdAttribute] = array($loginId);
         $state['UserID'] = $loginId;
 
@@ -1202,6 +1320,11 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
       return false;
     }
 
+    /**
+     * @param $e
+     *
+     * @throws Exception
+     */
     private function _showException($e)
     {
         $globalConfig = SimpleSAML_Configuration::getInstance();
