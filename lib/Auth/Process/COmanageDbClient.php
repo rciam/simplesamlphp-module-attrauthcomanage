@@ -110,12 +110,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' and not ident.deleted'
         . ' and ident.identifier_id is null';
 
-    private $profileQuery = "SELECT string_agg(DISTINCT name.given, ',')       AS name,"
-        . " string_agg(DISTINCT name.family, ',')      AS family,"
-        . " string_agg(mail.id::text, ',')             AS mail_id,"
-        . " string_agg(mail.mail, ',')                 AS mail,"
-        . " string_agg(mail.verified::text, ',')       AS verified,"
-        . " string_agg(DISTINCT ident.identifier, ',') AS identifier,"
+    private $profileQuery = "SELECT string_agg(DISTINCT name.given, ',')       AS given,"
+        . " string_agg(DISTINCT name.family, ',')                              AS family,"
+        . " string_agg(mail.id::text, ',')                                     AS mail_id,"
+        . " string_agg(mail.mail, ',')                                         AS mail,"
+        . " string_agg(mail.verified::text, ',')                               AS verified,"
+        . " string_agg(DISTINCT ident.identifier, ',')                         AS identifier,"
         . " (select string_agg(coi.affiliation || '@' || coi.o, ',') as eduPersonScopedAffiliation"
         . " from cm_org_identities as coi"
         . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id and"
@@ -124,7 +124,15 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . " coi.affiliation is not null and coi.affiliation != ''"
         . " where ccoil.co_person_id = :coPersonId"
         . " and coi.o is not null"
-        . " and coi.affiliation is not null)"
+        . " and coi.affiliation is not null),"
+        . " (select string_agg(DISTINCT cea.mail, ',') AS org_mail_verifed"
+        . " from cm_email_addresses as cea"
+        . " inner join cm_org_identities c on cea.org_identity_id = c.id and"
+        . " not c.deleted and c.org_identity_id is null"
+        . " inner join cm_co_org_identity_links l on c.id = l.org_identity_id and"
+        . " not l.deleted and l.co_org_identity_link_id is null"
+        . " where l.co_person_id= :coPersonId"
+        . " and cea.verified = true)"
         . " FROM cm_co_people person"
         . " LEFT OUTER JOIN cm_names name"
         . " ON person.id = name.co_person_id"
@@ -570,8 +578,16 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     /**
      * Execute the profileQuery and construct the result set
+     * #,name,family,mail_id,mail,verified,identifier,edupersonscopedaffiliation,org_mail_verifed
+     * CO Person name
+     * CO Person family name
+     * CO Person csv of mail ids/mail/verified flag
+     * CO Person identifer
+     * Org Identities csv of edupersonscopedaffiliation
+     * Org Identities csv of verified emails
      *
      * @param integer $personId
+     *
      * @return array|null
      * @throws Exception
      */
@@ -651,7 +667,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                       }
                     );
                     if (!empty($verified_mail_list)) {
-                        $state['Attributes']['voPersonVerifiedEmail'] = array_keys($verified_mail_list);
+                        $person_verified = array_keys($verified_mail_list);
+                        if (!empty($attributes['org_mail_verifed'])) {
+                            $org_mails = explode(',', $attributes['org_mail_verifed']);
+                            $person_verified = array_unique(array_merge($person_verified, $org_mails));
+                        }
+                        $state['Attributes']['voPersonVerifiedEmail'] = $person_verified;
                     }
                 }
             }
