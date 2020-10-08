@@ -146,21 +146,26 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . " AND name.primary_name = true"
         . " GROUP BY person.id;";
 
-    private $orgIdIdentQuery = 'select ident.type, ident.identifier, ident.login, ident.org_identity_id'
-        . ' from cm_identifiers as ident'
-        . ' inner join cm_org_identities coi on ident.org_identity_id = coi.id'
-        . ' and not ident.deleted'
-        . ' and ident.identifier_id is null'
-        . ' and not coi.deleted and coi.org_identity_id is null'
-        . ' inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id'
-        . ' and not ccoil.deleted'
-        . ' and ccoil.co_org_identity_link_id is null'
-        . ' inner join cm_co_people ccp on ccoil.co_person_id = ccp.id'
-        . ' and not ccp.deleted'
-        . ' and ccp.co_person_id is null'
-        . ' where ident.type in (:coOrgIdType)'
-        . ':isLogin' // XXX This is a placeholder for the whole line
-        . ' and ccp.id = :coPersonId';
+    private $orgIdIdentQuery = "select ident.type,"
+        . " ident.identifier,"
+        . " ident.login,"
+        . " ident.org_identity_id,"
+        . " coi.valid_from as org_valid_from,"
+        . " coi.valid_through as org_valid_through"
+        . " from cm_identifiers as ident"
+        . " inner join cm_org_identities coi on ident.org_identity_id = coi.id"
+        . " and not ident.deleted"
+        . " and ident.identifier_id is null"
+        . " and not coi.deleted and coi.org_identity_id is null"
+        . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id"
+        . " and not ccoil.deleted"
+        . " and ccoil.co_org_identity_link_id is null"
+        . " inner join cm_co_people ccp on ccoil.co_person_id = ccp.id"
+        . " and not ccp.deleted"
+        . " and ccp.co_person_id is null"
+        . " where ident.type in (:coOrgIdType)"
+        . ":isLogin" // XXX This is a placeholder for the whole lin"
+        . " and ccp.id = :coPersonId";
 
     private $certQuery = 'SELECT'
         . ' DISTINCT(cert.subject)'
@@ -516,6 +521,52 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
         return false;
     }
+
+    /**
+     * Check whether the identifier fetched from the IdP has expired
+     * If valid from and valid through fields are empty we assume that the Identifier will never expire
+     *
+     * @param   string  $idpIdent    Identifier provided by the Identity Provider
+     * @param   array   $identsList  List of OrgIdentity Identifiers
+     *
+     * @return bool|null true(is expired), false(is not expired), null if either of the parameters are empty
+     * @throws Exception
+     * @todo make timezone configuration
+     */
+    private function isIdpIdentExpired($idpIdent, $identsList) {
+        if( empty($identsList) || empty($idpIdent)) {
+            return null;
+        }
+        foreach ($identsList as $identifierTypes) {
+            foreach($identifierTypes as $ident) {
+                if( $ident['identifier'] === $idpIdent) {
+                    SimpleSAML_Logger::debug("[attrauthcomanage] isIdpIdentExpired: org_valid_through = " . var_export($ident['org_valid_through'], true));
+                    SimpleSAML_Logger::debug("[attrauthcomanage] isIdpIdentExpired: org_valid_from = " . var_export($ident['org_valid_from'], true));
+                    $current_date = new DateTime('now', new DateTimeZone('Etc/UTC'));
+                    if (empty($ident['org_valid_from']) && empty($ident['org_valid_through'])) {
+                        return false;
+                    } elseif (empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
+                        $valid_through = new DateTime($ident['org_valid_through'], new DateTimeZone('Etc/UTC'));
+                        return !($valid_through >= $current_date);
+                    } elseif (!empty($ident['org_valid_from']) && empty($ident['org_valid_through'])) {
+                        $valid_from = new DateTime($ident['org_valid_from'], new DateTimeZone('Etc/UTC'));
+                        return !($current_date >= $valid_from);
+                    } elseif (!empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
+                        $valid_from = new DateTime($ident['org_valid_from'], new DateTimeZone('Etc/UTC'));
+                        $valid_through = new DateTime($ident['org_valid_through'], new DateTimeZone('Etc/UTC'));
+                        if ($valid_through >= $current_date
+                            && $current_date > $valid_from) {
+                            return false;
+                        } else {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
 
     /**
      * Execute the profileQuery and construct the result set
@@ -1049,9 +1100,18 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         if (!empty($orgIdentifiers)) {
             $state['orgIndentifiersList'] = $orgIdentifiers;
         }
+        // XXX Check if the identifier is an authenticator
         if (!$this->isIdpIdentLogin($orgId, $orgIdentifiers)) {
             // Normally, this should not happen
             $err_msg = 'The identifier <b>- ' . $orgId . ' -</b><br>is not present in your EGI account or is not a valid authenticator.<br>Please contact support for further assistance.';
+            throw new Exception($err_msg);
+        }
+        // XXX Check if the identifier is valid or has expired
+        if ($this->isIdpIdentExpired($orgId, $orgIdentifiers)) {
+            // Normally, this should not happen
+            $err_msg = "The identifier <b>- " . $orgId . " -</b> is not a valid authenticator.";
+            $err_msg .= "<br>The subscription from <b>" . end($state['saml:AuthenticatingAuthority']) . "</b> expired.";
+            $err_msg .= "<br>Please contact support for further assistance.";
             throw new Exception($err_msg);
         }
 
