@@ -504,6 +504,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                   ',',
                   $attributes['edupersonscopedaffiliation']
                 );
+                // XXX Remove any duplicate edupersonscopedaffiliation
+                $state['Attributes']['eduPersonScopedAffiliation'] = array_filter(array_unique($state['Attributes']['eduPersonScopedAffiliation']));
             }
             if (!empty($attributes['identifier'])) {
                 $state['Attributes']['uid'] = array($attributes['identifier']);
