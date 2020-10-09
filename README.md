@@ -59,6 +59,7 @@ Optionally, you can configure a database slave by editing the `database.slaves` 
 The following authproc filter configuration options are supported:
   * `coId`: Required, an integer containing the ID of the CO to use. There is no default value, must not be null.
   * `coUserIdType`: Optional, a string that indicates the type of the identifier that the users have. Defaults to `epuid`.
+  * `coTermsId`: Optional, an integer that indicates the ID of the Terms Aggreement signed by the user for quering the COmanage Registry. Defaults to `null`.
   * `userIdAttribute`: Optional, a string containing the name of the attribute whose value to use for querying the COmanage Registry. Defaults to `"eduPersonPrincipalName"`.
   * `blacklist`: Optional, an array of strings that contains the SPs that the module will skip to process.
   * `voWhitelist`: Optional, an array of strings that contains VOs (COUs) for which the module will generate entitlements.
