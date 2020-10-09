@@ -13,6 +13,7 @@
  *       '60' => array(
  *            'class' => 'attrauthcomanage:COmanageDbClient',
  *            'coId' => 2,
+ *            'coTermsId' => 1,
  *            'userIdAttribute' => 'eduPersonUniqueId',
  *            'voWhitelist' => array(
  *               'vo.example.com',
@@ -55,7 +56,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
       'registry_login');
 
     private $coId;
-
+    private $coTermsId = null;
     private $coUserIdType = 'epuid';
 
     private $userIdAttribute = 'eduPersonUniqueId';
@@ -161,6 +162,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND NOT org.deleted'
         . ' AND cert.cert_id IS NULL'
         . ' AND NOT cert.deleted';
+
+    private $termsAgreementQuery = 'select terms.agreement_time'
+    . ' from cm_co_t_and_c_agreements terms'
+    . ' where'
+    . ' terms.co_person_id = :coPersonId'
+    . ' and terms.co_terms_and_conditions_id = :coTermsId';
+
 
     public function __construct($config, $reserved)
     {
@@ -287,6 +295,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             $this->urnLegacy = $config['urnLegacy'];
         }
+
         if (array_key_exists('mergeEntitlements', $config)) {
           if (!is_bool($config['urnLegacy'])) {
             SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'mergeEntitlements' not a boolean");
@@ -294,6 +303,16 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
               "attrauthcomanage configuration error: 'mergeEntitlements' not a boolean");
           }
           $this->mergeEntitlements = $config['mergeEntitlements'];
+        }
+
+        if (array_key_exists('coTermsId', $config)) {
+            if (!is_int($config['coTermsId'])) {
+                SimpleSAML_Logger::error(
+                  "[attrauthcomanage] Configuration error: 'coTermsId' not an integer");
+                throw new SimpleSAML_Error_Exception(
+                  "attrauthcomanage configuration error: 'coTermsId' not an integer");
+            }
+            $this->coTermsId = $config['coTermsId'];
         }
     }
 
@@ -1101,6 +1120,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         if (!empty($state['Attributes']['eduPersonEntitlement'])) {
             SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData AFTER: eduPersonEntitlement=" . var_export($state['Attributes']['eduPersonEntitlement'], true));
         }
+
+        // XXX Terms Agreement
+        if (!empty($this->coTermsId)) {
+            $termsAgreement = $this->getTermsAgreement($basicInfo['id'], $this->coTermsId);
+            $state['Attributes']['termsAccepted'] = empty($termsAgreement) ? array(false) : array(true);
+        }
     }
 
     /**
@@ -1204,6 +1229,44 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
       return false;
     }
 
+    /**
+     * @param integer $personId
+     * @param integer $coTermsId
+     *
+     * @return array
+     * @throws Exception
+     */
+    private function getTermsAgreement($personId, $coTermsId)
+    {
+        SimpleSAML_Logger::debug("[attrauthcomanage] getTermsAgreement: personId="
+                                 . var_export($personId, true));
+
+        $result = array();
+        $db = SimpleSAML\Database::getInstance();
+        $queryParams = array(
+          'coPersonId' => array($personId, PDO::PARAM_INT),
+          'coTermsId' => array($coTermsId, PDO::PARAM_INT),
+        );
+        $stmt = $db->read($this->termsAgreementQuery, $queryParams);
+        if ($stmt->execute()) {
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $result[] = $row;
+            }
+            SimpleSAML_Logger::debug("[attrauthcomanage] getTermsAgreement: result="
+                                     . var_export($result, true));
+            return $result;
+        } else {
+            throw new Exception('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param $e
+     *
+     * @throws Exception
+     */
     private function _showException($e)
     {
         $globalConfig = SimpleSAML_Configuration::getInstance();
