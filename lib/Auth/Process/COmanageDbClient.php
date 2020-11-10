@@ -63,7 +63,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $userIdAttribute = 'eduPersonUniqueId';
 
     // List of VO names that should be included in entitlements.
-    private $voWhitelist = array();
+    private $voWhitelist = null;
 
     private $urnNamespace = null;
     private $urnAuthority = null;
@@ -881,7 +881,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         foreach ($cou_tree_structure as $cou_id => $sub_tree) {
             // XXX Split the full path and encode each part.
             $parent_vo = array_values($sub_tree['path_full_list'])[0];
-            if (!in_array($parent_vo, $this->voWhitelist, true)) {
+            if (isset($this->voWhitelist) && !in_array($parent_vo, $this->voWhitelist, true)) {
                 continue;
             }
             // XXX Also exclude the ones that are admin groups
@@ -1051,18 +1051,20 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 continue;
             }
             $vo_roles = array();
-            if (!in_array($cou['group_name'], $this->voWhitelist, true)) {
+            if (isset($this->voWhitelist) && !in_array($cou['group_name'], $this->voWhitelist, true)) {
                 // XXX Check if there is a root COU that is in the voWhitelist
                 // XXX :admins this is not part of the voWhiteList that's why i do not get forward
                 $parent_cou_name = $this->getCouRootParent($cou['group_name'], $nested_cous);
-                if (!in_array($parent_cou_name, $this->voWhitelist, true)
+                if (isset($this->voWhitelist)
+                    && !in_array($parent_cou_name, $this->voWhitelist, true)
                     && strpos($cou['group_name'], ':admins') === false) {
                     // XXX Remove a child COU that has no parent in the voWhitelist OR
                     // XXX Remove if it does not represent an admins group AND
                     unset($cou_memberships[$idx]);
                     continue;
                 }
-                if (!in_array($parent_cou_name, $this->voWhitelist, true)
+                if (isset($this->voWhitelist)
+                    && !in_array($parent_cou_name, $this->voWhitelist, true)
                     && !strpos($cou['group_name'], ':admins') === false) {
                     continue;
                 }
