@@ -211,10 +211,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         $this->voRolesDef = $voRolesObject->getArrayCopy();
 
         // voGroupPrefix config
-        if (array_key_exists('voGroupPrefix', $config) && is_array($config['voGroupPrefix'])) {
-            SimpleSAML_Logger::debug("[attrauthcomanage] Configuration error: 'voGroupPrefix' not specified or wrong format(array required)");
-            $this->voGroupPrefix = $config['voGroupPrefix'];
+        if (!array_key_exists('voGroupPrefix', $config) && !is_array($config['voGroupPrefix'])) {
+            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voGroupPrefix' not specified or wrong format(array required)");
+            throw new SimpleSAML_Error_Exception(
+                "attrauthcomanage configuration error: 'voGroupPrefix' not specified");
         }
+        $this->voGroupPrefix = $config['voGroupPrefix'];
 
         // urnAuthority config
         if (!array_key_exists('urnAuthority', $config) && !is_string($config['urnAuthority'])) {
