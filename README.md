@@ -62,7 +62,7 @@ The following authproc filter configuration options are supported:
   * `coTermsId`: Optional, an integer that indicates the ID of the Terms Aggreement signed by the user for quering the COmanage Registry. Defaults to `null`.
   * `userIdAttribute`: Optional, a string containing the name of the attribute whose value to use for querying the COmanage Registry. Defaults to `"eduPersonPrincipalName"`.
   * `blacklist`: Optional, an array of strings that contains the SPs that the module will skip to process.
-  * `voWhitelist`: Optional, an array of strings that contains VOs (COUs) for which the module will generate entitlements.
+  * `voWhitelist`: Optional, an array of strings that contains VOs (COUs) for which the module will generate entitlements. Defaults to `null`. If `null`, the voWhitelist check is skipped.
   * `communityIdps`: Optional, an array of strings that contains the Entity Ids of trusted communities.
   * `urnNamespace`: Required, a string to use as the URN namespace of the generated `eduPersonEntitlement` values containing group membership and role information.
   * `voRoles`: Required, an array of default roles to be used for the composition of the entitlements.
