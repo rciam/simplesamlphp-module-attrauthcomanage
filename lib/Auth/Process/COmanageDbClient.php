@@ -39,6 +39,14 @@
  *               'community_sign_up' => 'https://example.com/registry/co_petitions/start/coef:3',
  *               'registry_login'    => 'https://example.com/registry/co_petitions/auth/login',
  *            ),
+ *            // Currently only Indentifier attributes are supported, like
+ *            'attrMap' => array(
+ *               'eppn' => 'eduPersonPrincipalName',
+ *               'eptid' => 'eduPersonTargetedID',
+ *               'epuid' => 'eduPersonUniqueId',
+ *               'orcid' => 'eduPersonOrcid',
+ *               'uid' => 'uid',
+ *            ),
  *       ),
  *
  * @author Nicolas Liampotis <nliam@grnet.gr>
@@ -58,6 +66,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     // List of VO names that should be included in entitlements.
     private $voWhitelist = null;
+    private $attrMap = null;
 
     private $urnNamespace = null;
     private $urnAuthority = null;
@@ -104,21 +113,23 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' and not ident.deleted'
         . ' and ident.identifier_id is null';
 
-    private $profileQuery = "SELECT string_agg(DISTINCT name.given, ',')       AS given,"
-        . " string_agg(DISTINCT name.family, ',')      AS family,"
-        . " string_agg(mail.id::text, ',')             AS mail_id,"
-        . " string_agg(mail.mail, ',')                 AS mail,"
-        . " string_agg(mail.verified::text, ',')       AS verified,"
-        . " string_agg(DISTINCT ident.identifier, ',') AS identifier,"
+    private $profileQuery = "SELECT string_agg(DISTINCT name.given, ',') AS given,"
+        . " string_agg(DISTINCT name.family, ',') AS family,"
+        . " string_agg(DISTINCT mail.id::text || ':' || mail.mail || ':' || mail.verified::text, ',')   AS mail,"
+        . " string_agg(DISTINCT ident.type || ':' || ident.identifier, ',') AS identifier,"
         . " (select string_agg(coi.affiliation || '@' || coi.o, ',') as eduPersonScopedAffiliation"
         . " from cm_org_identities as coi"
         . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id and"
         . " not coi.deleted and not ccoil.deleted and"
         . " coi.o is not null and coi.o != '' and"
         . " coi.affiliation is not null and coi.affiliation != ''"
-        . " where ccoil.co_person_id = :coPersonId"
-        . " and coi.o is not null"
-        . " and coi.affiliation is not null)"
+        . " where ccoil.co_person_id = :coPersonId),"
+        . " (select string_agg(coi.o, ',') as organization"
+        . " from cm_org_identities as coi"
+        . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id and"
+        . " not coi.deleted and not ccoil.deleted and"
+        . " coi.o is not null and coi.o != ''"
+        . " where ccoil.co_person_id = :coPersonId)"
         . " FROM cm_co_people person"
         . " LEFT OUTER JOIN cm_names name"
         . " ON person.id = name.co_person_id"
@@ -135,7 +146,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . " AND NOT ident.deleted"
         . " WHERE NOT person.deleted"
         . " AND name.type = 'official'"
-        . " AND ident.type = 'uid'"
         . " AND person.id = :coPersonId"
         . " AND name.primary_name = true"
         . " GROUP BY person.id;";
@@ -159,11 +169,11 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND cert.cert_id IS NULL'
         . ' AND NOT cert.deleted';
 
-    private $termsAgreementQuery = 'select terms.agreement_time'
-        . ' from cm_co_t_and_c_agreements terms'
-        . ' where'
-        . ' terms.co_person_id = :coPersonId'
-        . ' and terms.co_terms_and_conditions_id = :coTermsId';
+    private $termsAgreementQuery = "select terms.agreement_time"
+        . " from cm_co_t_and_c_agreements terms"
+        . " where"
+        . " terms.co_person_id = :coPersonId"
+        . " and terms.co_terms_and_conditions_id = :coTermsId";
 
 
     public function __construct($config, $reserved)
@@ -174,11 +184,10 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         // Validate Configuration Parameters
         $this->validateConfigParams($config, $this->validateConfigParamRules());
 
-        // Get a copy of teh default Roles before enriching with COmanage roles
-        // todo: Move this out configuration check. Make this as part of voRoles multitenacy support
+        // Get a copy of the default Roles before enriching with COmanage roles
+        // TODO: Move this out configuration check. Make this as part of voRoles multitenacy support
         $voRolesObject = new ArrayObject($config['voRoles']);
         $this->voRolesDef = $voRolesObject->getArrayCopy();
-
     }
 
     public function process(&$state)
@@ -353,34 +362,34 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             if (!empty($attributes['mail'])) {
                 // Sort the mails by their row unique id(lowest to highest
-                $mail_list = array_combine(
-                    explode(',', $attributes['mail_id']),
-                    explode(',', $attributes['mail'])
-                );
-                if (ksort($mail_list)) {
-                    $state['Attributes']['mail'] = array(array_shift(($mail_list)));
-                } else {
-                    // Sorting failed return the first available
-                    $state['Attributes']['mail'] = array(
-                        explode(',', $attributes['mail'])[0]
-                    );
+                $mails = explode(',', $attributes['mail']);
+                $mails = array_filter($mails);
+                $pmail_list = array();
+                foreach($mails as $mail) {
+                    list($id, $email, $verified) = explode(':', $mail);
+                    $pmail_list[$id] = array($email => filter_var($verified, FILTER_VALIDATE_BOOLEAN));
                 }
-                unset($mail_list);
-                // XXX for the voPersonVerifiedEmail attribute we need an array with all the verified emails
-                if (!empty($attributes['verified'])) {
-                    $mail_list = array_combine(
-                        explode(',', $attributes['mail']),
-                        explode(',', $attributes['verified'])
-                    );
-                    $verified_mail_list = array_filter(
-                        $mail_list,
-                        static function ($verified) {
-                            return filter_var($verified, FILTER_VALIDATE_BOOLEAN) === true;
+                // XXX Sort and keep only the email and verified status.
+                $pmail_sorted_list = array();
+                if (ksort($pmail_list)) {
+                    foreach($pmail_list as $sorted_mails) {
+                        foreach($sorted_mails as $email => $verified) {
+                            $pmail_sorted_list[$email] = $verified;
                         }
-                    );
-                    if (!empty($verified_mail_list)) {
-                        $state['Attributes']['voPersonVerifiedEmail'] = array_keys($verified_mail_list);
                     }
+                }
+                // Get the oldest email in CO Person's profile
+                $pmail_sorted_list_keys = array_keys($pmail_sorted_list);
+                $state['Attributes']['mail'] = array(array_shift($pmail_sorted_list_keys));
+                // XXX for the voPersonVerifiedEmail attribute we need an array with all the verified emails
+                $verified_mail_list = array_filter(
+                    $pmail_sorted_list,
+                    static function ($verified, $mail) {
+                        return $verified === true;
+                    }, ARRAY_FILTER_USE_BOTH
+                );
+                if (!empty($verified_mail_list)) {
+                    $state['Attributes']['voPersonVerifiedEmail'] = array_keys($verified_mail_list);
                 }
             }
             if (!empty($attributes['edupersonscopedaffiliation'])) {
@@ -392,9 +401,28 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 $state['Attributes']['eduPersonScopedAffiliation'] = array_filter(array_unique($state['Attributes']['eduPersonScopedAffiliation']));
             }
             if (!empty($attributes['identifier'])) {
-                $state['Attributes']['uid'] = array($attributes['identifier']);
+                $identifiers = explode(',', $attributes['identifier']);
+                foreach ($identifiers as $ident) {
+                    $ident_key_val = explode(':', $ident, 2);
+                    if(!empty($this->attrMap)
+                        && array_key_exists($ident_key_val[0], $this->attrMap)) {
+                        $attribute_key = $this->attrMap[$ident_key_val[0]];
+                    } else {
+                        $attribute_key = $ident_key_val[0];
+                        SimpleSAML_Logger::debug("[attrauthcomanage] constructProfile: No attrMap mapping found for COmanage attribute:"
+                                                 . var_export($ident_key_val,true));
+                    }
+                    if( array_key_exists($attribute_key,$state['Attributes'])
+                        && !in_array($ident_key_val[1], $state['Attributes'][$attribute_key], true)) {
+                        $state['Attributes'][$attribute_key][] = $ident_key_val[1];
+                    } else {
+                        $state['Attributes'][$attribute_key] = array($ident_key_val[1]);
+                    }
+                }
             }
         }
+        SimpleSAML_Logger::debug("[attrauthcomanage] constructProfile: profile="
+                                 . var_export($state['Attributes'], true));
 
         return true;
     }
@@ -467,7 +495,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             . " LEFT OUTER JOIN cm_co_person_roles AS ROLE ON cous.id = role.cou_id"
             . " AND role.co_person_role_id IS NULL"
             . " AND role.status = 'A'"
-            . " AND NOT role.deleted    AND role.co_person_id = members.co_person_id"
+            . " AND NOT role.deleted AND role.co_person_id = members.co_person_id"
             . " GROUP BY"
             . " groups.name";
 
