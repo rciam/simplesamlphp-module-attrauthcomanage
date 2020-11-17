@@ -57,12 +57,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 {
     // List of SP entity IDs that should be excluded from this filter.
     private $blacklist = array();
-    // List of allowed types of registry urls
-    private $registryUrlTypesAllowed = array(
-      'self_sign_up',
-      'sign_up',
-      'community_sign_up',
-      'registry_login');
 
     private $coId;
     private $coTermsId = null;
@@ -187,164 +181,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         parent::__construct($config, $reserved);
         assert('is_array($config)');
 
-        // XXX This is not a mandatory configuration option. SSP by default supports a list of attributes. If we do not define
-        // XXX a custom attrMap list then the default one will be used.
-        if (isset($config['attrMap'])) {
-            if(!is_array($config['attrMap'])) {
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'attrMap' not an array");
-            }
-            $this->attrMap = (array) $config['attrMap'];
-        }
+        // Validate Configuration Parameters
+        $this->validateConfigParams($config, $this->validateConfigParamRules());
 
-        if (!array_key_exists('coId', $config)) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coId' not specified");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'coId' not specified");
-        }
-        if (!is_int($config['coId'])) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coId' not an integer number");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'coId' not an integer number");
-        }
-        // XXX Assign the default value to the CO ID variable. If CO Selection module is enabled this will
-        // XXX be overwritten with the one chosen by the user
-        $this->coId = $config['coId'];
-
-        // urnNamespace config
-        if (!array_key_exists('urnNamespace', $config) && !is_string($config['urnNamespace'])) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnNamespace' not specified or wrong format(string required)");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'urnNamespace' not specified");
-        }
-        $this->urnNamespace = $config['urnNamespace'];
-
-        // voRoles config
-        if (!array_key_exists('voRoles', $config) && !is_array($config['voRoles'])) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(array required)");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'voRoles' not specified");
-        }
-        $this->voRoles = $config['voRoles'];
-        // Get a copy of teh default Roles before enriching with COmanage roles
+        // Get a copy of the default Roles before enriching with COmanage roles
+        // TODO: Move this out configuration check. Make this as part of voRoles multitenacy support
         $voRolesObject = new ArrayObject($config['voRoles']);
         $this->voRolesDef = $voRolesObject->getArrayCopy();
-
-        // voGroupPrefix config
-        if (array_key_exists('voGroupPrefix', $config) && is_array($config['voGroupPrefix'])) {
-            SimpleSAML_Logger::debug("[attrauthcomanage] Configuration error: 'voGroupPrefix' not specified or wrong format(array required)");
-            $this->voGroupPrefix = $config['voGroupPrefix'];
-        }
-
-        // urnAuthority config
-        if (!array_key_exists('urnAuthority', $config) && !is_string($config['urnAuthority'])) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnAuthority' not specified or wrong format(string required)");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'urnAuthority' not specified");
-        }
-        $this->urnAuthority = $config['urnAuthority'];
-
-        // Redirect Urls config
-        if (!array_key_exists('registryUrls', $config)) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' not specified");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'registryUrls' not specified");
-        } else {
-            // Check if the keys exist
-            $allowed = $this->registryUrlTypesAllowed;
-            $invalid_keys = array_filter($config['registryUrls'], function($key) use ($allowed) {
-                return !in_array($key, $allowed);
-            }, ARRAY_FILTER_USE_KEY);
-            $invalid_urls = array_filter($config['registryUrls'], function($value) {
-                return !filter_var($value, FILTER_VALIDATE_URL);
-            });
-            if (!empty($invalid_keys) || !empty($invalid_urls)) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' url or key configuration error");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'registryUrls' url or key configuration error");
-            }
-        }
-        $this->registryUrls = $config['registryUrls'];
-
-        if (array_key_exists('coUserIdType', $config)) {
-            if (!is_string($config['coUserIdType'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coUserIdType' not a string literal");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'coUserIdType' not a string literal");
-            }
-            $this->coUserIdType = $config['coUserIdType'];
-        }
-
-        if (array_key_exists('userIdAttribute', $config)) {
-            if (!is_string($config['userIdAttribute'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not a string literal");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'userIdAttribute' not a string literal");
-            }
-            $this->userIdAttribute = $config['userIdAttribute'];
-        }
-
-        if (array_key_exists('blacklist', $config)) {
-            if (!is_array($config['blacklist'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'blacklist' not an array");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'blacklist' not an array");
-            }
-            $this->blacklist = $config['blacklist'];
-        }
-        if (array_key_exists('voWhitelist', $config)) {
-            if (!is_array($config['voWhitelist'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voWhitelist' not an array");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'voWhitelist' not an array");
-            }
-            $this->voWhitelist = $config['voWhitelist'];
-        }
-        if (array_key_exists('communityIdps', $config)) {
-            if (!is_array($config['communityIdps'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'communityIdps' not an array");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'communityIdps' not an array");
-            }
-            $this->communityIdps = $config['communityIdps'];
-        }
-
-        if (array_key_exists('urnLegacy', $config)) {
-            if (!is_bool($config['urnLegacy'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnLegacy' not a boolean");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'urnLegacy' not a boolean");
-            }
-            $this->urnLegacy = $config['urnLegacy'];
-        }
-
-        if (array_key_exists('certificate', $config)) {
-            if (!is_bool($config['certificate'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'certificate' not a boolean");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'certificate' not a boolean");
-            }
-            $this->certificate = $config['certificate'];
-        }
-
-        if (array_key_exists('mergeEntitlements', $config)) {
-            if (!is_bool($config['urnLegacy'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'mergeEntitlements' not a boolean");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'mergeEntitlements' not a boolean");
-            }
-            $this->mergeEntitlements = $config['mergeEntitlements'];
-        }
-
-        if (array_key_exists('coTermsId', $config)) {
-            if (!is_int($config['coTermsId'])) {
-                SimpleSAML_Logger::error(
-                    "[attrauthcomanage] Configuration error: 'coTermsId' not an integer");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'coTermsId' not an integer");
-            }
-            $this->coTermsId = $config['coTermsId'];
-        }
     }
 
     public function process(&$state)
@@ -1319,6 +1162,139 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
 
         return $result;
+    }
+
+    /**
+     * @param $config
+     * @param $validateConfigParamRules
+     *
+     * @throws SimpleSAML_Error_Exception
+     */
+    private function validateConfigParams($config, $validateConfigParamRules) {
+        if(empty($config) || empty($validateConfigParamRules)) {
+            SimpleSAML_Logger::error("[attrauthcomanage] Config or validation Rules are missing.");
+            throw new SimpleSAML_Error_Exception(
+                "[attrauthcomanage] Config or validation Rules missing.");
+        }
+
+        foreach ($validateConfigParamRules as $req_opt_key => $validation_list) {
+            if($req_opt_key === 'required') {
+                /*
+                 * MANDATORY ATTRIBUTES
+                 */
+                foreach($validation_list as $req_attr => $validation_rules) {
+                    if (!array_key_exists($req_attr, $config)) {
+                        SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: '" . $req_attr . "' not specified");
+                        throw new SimpleSAML_Error_Exception(
+                            "attrauthcomanage configuration error: '" . $req_attr . "' not specified");
+                    }
+                    if (!$validation_rules['type']($config[$req_attr])) {
+                        SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: '" . $req_attr . "' wrong format(array required)");
+                        throw new SimpleSAML_Error_Exception(
+                            "attrauthcomanage configuration error: '" . $req_attr . "' wrong format(array required)");
+                    }
+                    if(array_key_exists('key_list', $validation_rules)) {
+                        $required_key_values = array_values($validation_rules['key_list']);
+                        $provided_keys = array_keys($config[$req_attr]);
+                        $non_provided_keys = array();
+                        foreach ($required_key_values as $req_key) {
+                            if (!in_array($req_key, $provided_keys)) {
+                                $non_provided_keys[] = $req_key;
+                            }
+                        }
+                        if (!empty($non_provided_keys) ) {
+                            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error:'" . $req_attr
+                                                     . "' key configuration errorRequired keys missing:"
+                                                     . implode(',', $non_provided_keys));
+                            throw new SimpleSAML_Error_Exception("attrauthcomanage configuration error:'" . $req_attr
+                                                                 . "' key configuration error. Required keys missing:"
+                                                                 . implode(',', $non_provided_keys));
+                        }
+
+                    }
+                    if(array_key_exists('value_filter',$validation_rules)) {
+                        $invalid_values = array();
+                        foreach ($config[$req_attr] as $value) {
+                            if(!filter_var($value, $validation_rules['value_filter'])) {
+                                $invalid_values[] = $value;
+                            }
+                        }
+                        if (!empty($invalid_values) ) {
+                            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error:'" . $req_attr . "' invalid value");
+                            throw new SimpleSAML_Error_Exception(
+                                "attrauthcomanage configuration error:'" . $req_attr . "' invalid value");
+                        }
+
+                    }
+
+                    $this->$req_attr=$config[$req_attr];
+                }
+            } elseif ($req_opt_key === 'optional') {
+                /*
+                 *  OPTIONAL ATTRIBUTES
+                 */
+                foreach($validation_list as $opt_attr => $type) {
+                    if (array_key_exists($opt_attr, $config)) {
+                        if (!$type($config[$opt_attr])) {
+                            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: " . $opt_attr . " not of type " . $type);
+                            throw new SimpleSAML_Error_Exception(
+                                "attrauthcomanage configuration error: $opt_attr not a boolean");
+                        }
+                        $this->$opt_attr = $config[$opt_attr];
+                    }
+                }
+            }
+        }
+    }
+
+
+    /**
+     * Array of validation rules for the config params.
+     * Make changes here and not in the constructor
+     *
+     * @return string[][]
+     */
+    private function validateConfigParamRules() {
+        return array(
+            'required' => array(
+                'coId' => array(
+                    'type' => 'is_int'
+                ),
+                'urnNamespace' => array(
+                    'type' => 'is_string'
+                ),
+                'voRoles' => array(
+                    'type' => 'is_array'
+                ),
+                'urnAuthority' => array(
+                    'type' => 'is_string'
+                ),
+                'registryUrls' => array(
+                    'type' => 'is_array',
+                    'key_list' => array(
+                        'self_sign_up',
+                        'sign_up',
+                        'community_sign_up',
+                        'registry_login'
+                    ),
+                    'value_filter' => FILTER_VALIDATE_URL,
+                ),
+            ),
+            'optional' => array(
+                'attrMap' => 'is_array',
+                'coOrgIdType' => 'is_array',
+                'blacklist' => 'is_array',
+                'voWhitelist' => 'is_array',
+                'communityIdps' => 'is_array',
+                'voGroupPrefix' => 'is_array',
+                'coUserIdType' => 'is_string',
+                'userIdAttribute' => 'is_string',
+                'urnLegacy' => 'is_bool',
+                'certificate' => 'is_bool',
+                'mergeEntitlements' => 'is_bool',
+                'coTermsId' => 'is_int',
+            ),
+        );
     }
 
     /**
