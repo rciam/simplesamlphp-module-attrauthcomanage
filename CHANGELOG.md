@@ -4,15 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v1.5.0] - 2020-11-17
+🌹
 
 ### Added
 
-- attrMap configuration. Map COmanage IdentifierEnum class values to SimpleSamlPHP Attibute values
+- `attrMap` configuration option. Map COmanage Registry `IdentifierEnum` class values to SimpleSAMLphp attibute names
 
 ## Changed
 
-- Improved calculation of COPerson's profile attributes
+- Improve calculation of COPerson's profile attributes
 
 ## [v1.4.2] - 2020-11-11
 
