@@ -241,6 +241,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 $state['basicInfo'] = $basicInfo;
             }
             if (empty($basicInfo['id']) || empty($basicInfo['status']) || ($basicInfo['status'] !== 'A' && $basicInfo['status'] !== 'GP')) {
+                  if ($basicInfo['status'] === 'S') {
+                      throw new SimpleSAML_Error_Exception('Your account has been suspended. Please contact support for further assistance.');
+                  }
                   $state['UserID'] = $orgId;
                   $state['ReturnProc'] = array(get_class($this), 'retrieveCOPersonData');
                   $params = array();
