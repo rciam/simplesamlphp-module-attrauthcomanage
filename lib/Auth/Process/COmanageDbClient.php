@@ -224,8 +224,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             if (empty($state['Attributes'][$this->userIdAttribute])) {
                 SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not available");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'userIdAttribute' not available");
+                $this->showError(
+                    "attrauthcomanage:attrauthcomanage:exception_USERIDATTRIBUTE_NOTAVAILABLE");
             }
             // XXX finalize the configurations now that we have the final CO Id value
             $this->voGroupPrefix = !empty($this->voGroupPrefix[$this->coId])
@@ -242,7 +242,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             if (empty($basicInfo['id']) || empty($basicInfo['status']) || ($basicInfo['status'] !== 'A' && $basicInfo['status'] !== 'GP')) {
                   if ($basicInfo['status'] === 'S') {
-                      throw new SimpleSAML_Error_Exception('Your account has been suspended. Please contact support for further assistance.');
+                      $this->showError('attrauthcomanage:attrauthcomanage:exception_SUSPENDED_USER');
                   }
                   $state['UserID'] = $orgId;
                   $state['ReturnProc'] = array(get_class($this), 'retrieveCOPersonData');
@@ -1355,8 +1355,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private function validateConfigParams($config, $validateConfigParamRules) {
         if(empty($config) || empty($validateConfigParamRules)) {
             SimpleSAML_Logger::error("[attrauthcomanage] Config or validation Rules are missing.");
-            throw new SimpleSAML_Error_Exception(
-                "[attrauthcomanage] Config or validation Rules missing.");
+            $this->showError(
+                "attrauthcomanage:attrauthcomanage:exception_CONFIG_VALIDATION_RULES_MISSING");
         }
 
         foreach ($validateConfigParamRules as $req_opt_key => $validation_list) {
@@ -1367,13 +1367,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 foreach($validation_list as $req_attr => $validation_rules) {
                     if (!array_key_exists($req_attr, $config)) {
                         SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: '" . $req_attr . "' not specified");
-                        throw new SimpleSAML_Error_Exception(
-                            "attrauthcomanage configuration error: '" . $req_attr . "' not specified");
+                        $this->showError(
+                            "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_NOT_SPECIFIED",  ['%REQATTR%' => $req_attr]);
                     }
                     if (!$validation_rules['type']($config[$req_attr])) {
                         SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: '" . $req_attr . "' wrong format(array required)");
-                        throw new SimpleSAML_Error_Exception(
-                            "attrauthcomanage configuration error: '" . $req_attr . "' wrong format(array required)");
+                        $this->showError(
+                            "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_WRONG_FORMAT", ['%REQATTR%' => $req_attr]);
                     }
                     if(array_key_exists('key_list', $validation_rules)) {
                         $required_key_values = array_values($validation_rules['key_list']);
@@ -1388,9 +1388,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                             SimpleSAML_Logger::error("[attrauthcomanage] Configuration error:'" . $req_attr
                                                      . "' key configuration errorRequired keys missing:"
                                                      . implode(',', $non_provided_keys));
-                            throw new SimpleSAML_Error_Exception("attrauthcomanage configuration error:'" . $req_attr
-                                                                 . "' key configuration error. Required keys missing:"
-                                                                 . implode(',', $non_provided_keys));
+                            $this->showError("attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_KEY_CONFIGURATION_ERROR", ['%REQATTR%' => $req_attr, '%NONKEYS%' => implode(',', $non_provided_keys)]);
                         }
 
                     }
@@ -1403,8 +1401,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                         }
                         if (!empty($invalid_values) ) {
                             SimpleSAML_Logger::error("[attrauthcomanage] Configuration error:'" . $req_attr . "' invalid value");
-                            throw new SimpleSAML_Error_Exception(
-                                "attrauthcomanage configuration error:'" . $req_attr . "' invalid value");
+                            $this->showError(
+                                "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_INVALID_VALUE", ['%REQATTR%' => $req_attr]);
                         }
 
                     }
@@ -1419,8 +1417,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     if (array_key_exists($opt_attr, $config)) {
                         if (!$type($config[$opt_attr])) {
                             SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: " . $opt_attr . " not of type " . $type);
-                            throw new SimpleSAML_Error_Exception(
-                                "attrauthcomanage configuration error: $opt_attr not a boolean");
+                            $this->showError(
+                                "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_NOT_BOOLEAN", ['%OPTATTR%' => $opt_attr]);
                         }
                         $this->$opt_attr = $config[$opt_attr];
                     }
@@ -1481,15 +1479,18 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
     /**
      * @param $e
-     *
+     * @param $parameters
+     * 
      * @throws Exception
      */
-    private function _showException($e)
+    private function showError($e, $parameters = NULL)
     {
         $globalConfig = SimpleSAML_Configuration::getInstance();
         $t = new SimpleSAML_XHTML_Template($globalConfig, 'attrauthcomanage:exception.tpl.php');
-        $t->data['e'] = $e->getMessage();
+        $t->data['e'] = $e;
+        $t->data['parameters'] = (!empty($parameters) ? $parameters : "");
         $t->show();
         exit();
     }
+
 }
