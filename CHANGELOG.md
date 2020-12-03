@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.5.2] - 2020-11-26
+
+### Changed
+- Improve handling of suspended users
+
+## [v1.5.1] - 2020-11-25
+
+### Added
+- `coOrgIdType` configuration option. List of Identifier types associated with user's Organizational Identities
+
+### Changed
+- Calculation of user's Profile Identifier. A valid Identifier must be an authenticator and must not be expired
+
+
+## [v1.5.0] - 2020-11-17
+🌹
+
+### Added
+
+- `attrMap` configuration option. Map COmanage Registry `IdentifierEnum` class values to SimpleSAMLphp attibute names
+
+## Changed
+
+- Improve calculation of COPerson's profile attributes
+
+## [v1.4.2] - 2020-11-11
+
+### Added
+
+- Add option to skip `voWhitelist` checks, if `voWhitelist` is `null`
+
 ## [v1.4.1] - 2020-11-04
 
 ### Added

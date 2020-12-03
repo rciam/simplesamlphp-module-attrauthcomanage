@@ -14,6 +14,8 @@
  *            'class' => 'attrauthcomanage:COmanageDbClient',
  *            'coId' => 2,
  *            'coTermsId' => 1,
+ *            'coOrgIdType' => array('epuid'),
+ *            'coUserIdType' => 'epuid',
  *            'userIdAttribute' => 'eduPersonUniqueId',
  *            'voWhitelist' => array(
  *               'vo.example.com',
@@ -40,6 +42,14 @@
  *               'community_sign_up_no_aff' => 'https://example.com/registry/co_petitions/start/coef:4',
  *               'registry_login'    => 'https://example.com/registry/co_petitions/auth/login',
  *            ),
+ *            // Currently only Indentifier attributes are supported, like
+ *            'attrMap' => array(
+ *               'eppn' => 'eduPersonPrincipalName',
+ *               'eptid' => 'eduPersonTargetedID',
+ *               'epuid' => 'eduPersonUniqueId',
+ *               'orcid' => 'eduPersonOrcid',
+ *               'uid' => 'uid',
+ *            ),
  *       ),
  *
  * @author Nicolas Liampotis <nliam@grnet.gr>
@@ -50,22 +60,17 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 {
     // List of SP entity IDs that should be excluded from this filter.
     private $blacklist = array();
-    // List of allowed types of registry urls
-    private $registryUrlTypesAllowed = array(
-      'self_sign_up',
-      'sign_up',
-      'community_sign_up',
-      'community_sign_up_no_aff',
-      'registry_login');
 
     private $coId;
     private $coTermsId = null;
     private $coUserIdType = 'epuid';
+    private $coOrgIdType = array('epuid');
 
     private $userIdAttribute = 'eduPersonUniqueId';
 
     // List of VO names that should be included in entitlements.
-    private $voWhitelist = array();
+    private $voWhitelist = null;
+    private $attrMap = null;
 
     private $urnNamespace = null;
     private $urnAuthority = null;
@@ -81,7 +86,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $voRolesDef = array();
     private $coGroupMemberships = array();
 
-    private $_basicInfoQuery = 'select'
+    private $basicInfoQuery = 'select'
         . ' person.id,'
         . ' person.status,'
         . ' person.co_id'
@@ -104,7 +109,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' and ident.identifier_id is null'
         . ' and ident.identifier = :coPersonOrgId';
 
-    private $_loginIdQuery = 'select ident.identifier'
+    private $coPersonIdentQuery = 'select ident.identifier'
         . ' from cm_identifiers ident'
         . ' where'
         . ' ident.co_person_id = :coPersonId'
@@ -112,21 +117,23 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' and not ident.deleted'
         . ' and ident.identifier_id is null';
 
-    private $profileQuery = "SELECT string_agg(DISTINCT name.given, ',')       AS given,"
-        . " string_agg(DISTINCT name.family, ',')      AS family,"
-        . " string_agg(mail.id::text, ',')             AS mail_id,"
-        . " string_agg(mail.mail, ',')                 AS mail,"
-        . " string_agg(mail.verified::text, ',')       AS verified,"
-        . " string_agg(DISTINCT ident.identifier, ',') AS identifier,"
+    private $profileQuery = "SELECT string_agg(DISTINCT name.given, ',') AS given,"
+        . " string_agg(DISTINCT name.family, ',') AS family,"
+        . " string_agg(DISTINCT mail.id::text || ':' || mail.mail || ':' || mail.verified::text, ',')   AS mail,"
+        . " string_agg(DISTINCT ident.type || ':' || ident.identifier, ',') AS identifier,"
         . " (select string_agg(coi.affiliation || '@' || coi.o, ',') as eduPersonScopedAffiliation"
         . " from cm_org_identities as coi"
         . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id and"
         . " not coi.deleted and not ccoil.deleted and"
         . " coi.o is not null and coi.o != '' and"
         . " coi.affiliation is not null and coi.affiliation != ''"
-        . " where ccoil.co_person_id = :coPersonId"
-        . " and coi.o is not null"
-        . " and coi.affiliation is not null)"
+        . " where ccoil.co_person_id = :coPersonId),"
+        . " (select string_agg(coi.o, ',') as organization"
+        . " from cm_org_identities as coi"
+        . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id and"
+        . " not coi.deleted and not ccoil.deleted and"
+        . " coi.o is not null and coi.o != ''"
+        . " where ccoil.co_person_id = :coPersonId)"
         . " FROM cm_co_people person"
         . " LEFT OUTER JOIN cm_names name"
         . " ON person.id = name.co_person_id"
@@ -143,10 +150,30 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . " AND NOT ident.deleted"
         . " WHERE NOT person.deleted"
         . " AND name.type = 'official'"
-        . " AND ident.type = 'uid'"
         . " AND person.id = :coPersonId"
         . " AND name.primary_name = true"
         . " GROUP BY person.id;";
+
+    private $orgIdIdentQuery = "select ident.type,"
+        . " ident.identifier,"
+        . " ident.login,"
+        . " ident.org_identity_id,"
+        . " coi.valid_from as org_valid_from,"
+        . " coi.valid_through as org_valid_through"
+        . " from cm_identifiers as ident"
+        . " inner join cm_org_identities coi on ident.org_identity_id = coi.id"
+        . " and not ident.deleted"
+        . " and ident.identifier_id is null"
+        . " and not coi.deleted and coi.org_identity_id is null"
+        . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id"
+        . " and not ccoil.deleted"
+        . " and ccoil.co_org_identity_link_id is null"
+        . " inner join cm_co_people ccp on ccoil.co_person_id = ccp.id"
+        . " and not ccp.deleted"
+        . " and ccp.co_person_id is null"
+        . " where ident.type in (:coOrgIdType)"
+        . ":isLogin" // XXX This is a placeholder for the entire line"
+        . " and ccp.id = :coPersonId";
 
     private $certQuery = 'SELECT'
         . ' DISTINCT(cert.subject)'
@@ -167,11 +194,11 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND cert.cert_id IS NULL'
         . ' AND NOT cert.deleted';
 
-    private $termsAgreementQuery = 'select terms.agreement_time'
-        . ' from cm_co_t_and_c_agreements terms'
-        . ' where'
-        . ' terms.co_person_id = :coPersonId'
-        . ' and terms.co_terms_and_conditions_id = :coTermsId';
+    private $termsAgreementQuery = "select terms.agreement_time"
+        . " from cm_co_t_and_c_agreements terms"
+        . " where"
+        . " terms.co_person_id = :coPersonId"
+        . " and terms.co_terms_and_conditions_id = :coTermsId";
 
 
     public function __construct($config, $reserved)
@@ -179,154 +206,13 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         parent::__construct($config, $reserved);
         assert('is_array($config)');
 
-        if (!array_key_exists('coId', $config)) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coId' not specified");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'coId' not specified");
-        }
-        if (!is_int($config['coId'])) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coId' not an integer number");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'coId' not an integer number");
-        }
-        // XXX Assign the default value to the CO ID variable. If CO Selection module is enabled this will
-        // XXX be overwritten with the one chosen by the user
-        $this->coId = $config['coId'];
+        // Validate Configuration Parameters
+        $this->validateConfigParams($config, $this->validateConfigParamRules());
 
-        // urnNamespace config
-        if (!array_key_exists('urnNamespace', $config) && !is_string($config['urnNamespace'])) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnNamespace' not specified or wrong format(string required)");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'urnNamespace' not specified");
-        }
-        $this->urnNamespace = $config['urnNamespace'];
-
-        // voRoles config
-        if (!array_key_exists('voRoles', $config) && !is_array($config['voRoles'])) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voRoles' not specified or wrong format(array required)");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'voRoles' not specified");
-        }
-        $this->voRoles = $config['voRoles'];
-        // Get a copy of teh default Roles before enriching with COmanage roles
+        // Get a copy of the default Roles before enriching with COmanage roles
+        // TODO: Move this out configuration check. Make this as part of voRoles multitenacy support
         $voRolesObject = new ArrayObject($config['voRoles']);
         $this->voRolesDef = $voRolesObject->getArrayCopy();
-
-        // voGroupPrefix config
-        if (array_key_exists('voGroupPrefix', $config) && is_array($config['voGroupPrefix'])) {
-            SimpleSAML_Logger::debug("[attrauthcomanage] Configuration error: 'voGroupPrefix' not specified or wrong format(array required)");
-            $this->voGroupPrefix = $config['voGroupPrefix'];
-        }
-
-        // urnAuthority config
-        if (!array_key_exists('urnAuthority', $config) && !is_string($config['urnAuthority'])) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnAuthority' not specified or wrong format(string required)");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'urnAuthority' not specified");
-        }
-        $this->urnAuthority = $config['urnAuthority'];
-
-        // Redirect Urls config
-        if (!array_key_exists('registryUrls', $config)) {
-            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' not specified");
-            throw new SimpleSAML_Error_Exception(
-                "attrauthcomanage configuration error: 'registryUrls' not specified");
-        } else {
-            // Check if the keys exist
-            $allowed = $this->registryUrlTypesAllowed;
-            $invalid_keys = array_filter($config['registryUrls'], function($key) use ($allowed) {
-                return !in_array($key, $allowed);
-            }, ARRAY_FILTER_USE_KEY);
-            $invalid_urls = array_filter($config['registryUrls'], function($value) {
-                return !filter_var($value, FILTER_VALIDATE_URL);
-            });
-            if (!empty($invalid_keys) || !empty($invalid_urls)) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'registryUrls' url or key configuration error");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'registryUrls' url or key configuration error");
-            }
-        }
-        $this->registryUrls = $config['registryUrls'];
-
-        if (array_key_exists('coUserIdType', $config)) {
-            if (!is_string($config['coUserIdType'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'coUserIdType' not a string literal");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'coUserIdType' not a string literal");
-            }
-            $this->coUserIdType = $config['coUserIdType'];
-        }
-
-        if (array_key_exists('userIdAttribute', $config)) {
-            if (!is_string($config['userIdAttribute'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not a string literal");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'userIdAttribute' not a string literal");
-            }
-            $this->userIdAttribute = $config['userIdAttribute'];
-        }
-
-        if (array_key_exists('blacklist', $config)) {
-            if (!is_array($config['blacklist'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'blacklist' not an array");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'blacklist' not an array");
-            }
-            $this->blacklist = $config['blacklist'];
-        }
-        if (array_key_exists('voWhitelist', $config)) {
-            if (!is_array($config['voWhitelist'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'voWhitelist' not an array");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'voWhitelist' not an array");
-            }
-            $this->voWhitelist = $config['voWhitelist'];
-        }
-        if (array_key_exists('communityIdps', $config)) {
-            if (!is_array($config['communityIdps'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'communityIdps' not an array");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'communityIdps' not an array");
-            }
-            $this->communityIdps = $config['communityIdps'];
-        }
-
-        if (array_key_exists('urnLegacy', $config)) {
-            if (!is_bool($config['urnLegacy'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'urnLegacy' not a boolean");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'urnLegacy' not a boolean");
-            }
-            $this->urnLegacy = $config['urnLegacy'];
-        }
-
-        if (array_key_exists('certificate', $config)) {
-            if (!is_bool($config['certificate'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'certificate' not a boolean");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'certificate' not a boolean");
-            }
-            $this->certificate = $config['certificate'];
-        }
-
-        if (array_key_exists('mergeEntitlements', $config)) {
-            if (!is_bool($config['urnLegacy'])) {
-                SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'mergeEntitlements' not a boolean");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'mergeEntitlements' not a boolean");
-            }
-            $this->mergeEntitlements = $config['mergeEntitlements'];
-        }
-
-        if (array_key_exists('coTermsId', $config)) {
-            if (!is_int($config['coTermsId'])) {
-                SimpleSAML_Logger::error(
-                    "[attrauthcomanage] Configuration error: 'coTermsId' not an integer");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'coTermsId' not an integer");
-            }
-            $this->coTermsId = $config['coTermsId'];
-        }
     }
 
     public function process(&$state)
@@ -338,10 +224,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 return;
             }
             if (empty($state['Attributes'][$this->userIdAttribute])) {
-                //echo '<pre>' . var_export($state, true) . '</pre>';
                 SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: 'userIdAttribute' not available");
-                throw new SimpleSAML_Error_Exception(
-                    "attrauthcomanage configuration error: 'userIdAttribute' not available");
+                $this->showError(
+                    "attrauthcomanage:attrauthcomanage:exception_USERIDATTRIBUTE_NOTAVAILABLE");
             }
             // XXX finalize the configurations now that we have the final CO Id value
             $this->voGroupPrefix = !empty($this->voGroupPrefix[$this->coId])
@@ -351,12 +236,15 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             unset($state['Attributes']['uid']);
             $orgId = $state['Attributes'][$this->userIdAttribute][0];
             SimpleSAML_Logger::debug("[attrauthcomanage] process: orgId=" . var_export($orgId, true));
-            $basicInfo = $this->_getBasicInfo($orgId);
+            $basicInfo = $this->getBasicInfo($orgId);
             SimpleSAML_Logger::debug("[attrauthcomanage] process: basicInfo=". var_export($basicInfo, true));
             if (!empty($basicInfo)) {
                 $state['basicInfo'] = $basicInfo;
             }
             if (empty($basicInfo['id']) || empty($basicInfo['status']) || ($basicInfo['status'] !== 'A' && $basicInfo['status'] !== 'GP')) {
+                  if ($basicInfo['status'] === 'S') {
+                      $this->showError('attrauthcomanage:attrauthcomanage:exception_SUSPENDED_USER');
+                  }
                   $state['UserID'] = $orgId;
                   $state['ReturnProc'] = array(get_class($this), 'retrieveCOPersonData');
                   $params = array();
@@ -405,9 +293,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['sign_up'], $params);
     }
 
-    private function _getBasicInfo($orgId)
+    private function getBasicInfo($orgId)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] _getBasicInfo: orgId="
+        SimpleSAML_Logger::debug("[attrauthcomanage] getBasicInfo: orgId="
             . var_export($orgId, true));
 
         $db = SimpleSAML\Database::getInstance();
@@ -415,36 +303,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             'coId'          => array($this->coId, PDO::PARAM_INT),
             'coPersonOrgId' => array($orgId, PDO::PARAM_STR),
         );
-        $stmt = $db->read($this->_basicInfoQuery, $queryParams);
+        $stmt = $db->read($this->basicInfoQuery, $queryParams);
         if ($stmt->execute()) {
             if ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                SimpleSAML_Logger::debug("[attrauthcomanage] _getBasicInfo: result="
+                SimpleSAML_Logger::debug("[attrauthcomanage] getBasicInfo: result="
                     . var_export($result, true));
-                return $result;
-            }
-        } else {
-            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
-        }
-
-        return null;
-    }
-
-    private function _getLoginId($personId)
-    {
-        SimpleSAML_Logger::debug("[attrauthcomanage] _getLoginId: personId="
-            . var_export($personId, true));
-
-        $db = SimpleSAML\Database::getInstance();
-        $queryParams = array(
-            'coPersonId'     => array($personId, PDO::PARAM_INT),
-            'coPersonIdType' => array($this->coUserIdType, PDO::PARAM_STR),
-        );
-        $stmt = $db->read($this->_loginIdQuery, $queryParams);
-        if ($stmt->execute()) {
-            if ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                SimpleSAML_Logger::debug("[attrauthcomanage] _getLoginId: result="
-                    . var_export($result, true));
-                return $result['identifier'];
+               return $result;
             }
         } else {
             throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
@@ -454,9 +318,164 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     }
 
     /**
+     * @param integer $personId The ID of the CO Person in COmanage
+     * @param string $identifier_type The type of identifier
+     *
+     * @return mixed|null
+     * @throws Exception
+     * @todo add the Identifier types in the dictionary
+     */
+    private function getCoPersonIdentifier($personId, $identifier_type)
+    {
+        SimpleSAML_Logger::debug("[attrauthcomanage] getCoPersonIdentifier: personId="
+            . var_export($personId, true));
+
+        $db = SimpleSAML\Database::getInstance();
+        $queryParams = array(
+            'coPersonId'     => array($personId, PDO::PARAM_INT),
+            'coPersonIdType' => array($identifier_type, PDO::PARAM_STR),
+        );
+        $stmt = $db->read($this->coPersonIdentQuery, $queryParams);
+        if ($stmt->execute()) {
+            if ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                SimpleSAML_Logger::debug("[attrauthcomanage] getCoPersonIdentifier: result="
+                    . var_export($result, true));
+               return $result['identifier'];
+            }
+        } else {
+            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+        }
+
+        return null;
+    }
+
+    /**
+     * Fetch all the Identifiers linked to OrgIdentities. Define whether these identifiers are authenticators or not
+     *
+     * @param   string  $personId   The CO Person ID
+     * @param   array   $orgIdentTypeList
+     * @param   bool    $isLogin   , true, false or null are allowed
+     *
+     * @return array|null Return an array of identifiers, column headers [ident.type, ident.identifier, ident.login, ident.org_identity_id]
+     * @throws Exception
+     */
+    private function getOrgIdentifiers($personId, $orgIdentTypeList, $isLogin=null)
+    {
+        SimpleSAML_Logger::debug('[attrauthcomanage] getOrgIdentifiers: personId=' . var_export($personId, true));
+
+        $db = SimpleSAML\Database::getInstance();
+        $this->orgIdIdentQuery = str_replace(':coOrgIdType',
+                                              "'" . implode("','", $orgIdentTypeList) . "'",
+                                              $this->orgIdIdentQuery);
+        if(is_null($isLogin)) {
+            $isLoginConditionStr = '';
+        } else {
+            $isLoginCondition = ($isLogin) ? 'true' : 'false';
+            $isLoginConditionStr = ' and ident.login=' . $isLoginCondition;
+        }
+
+        $this->orgIdIdentQuery = str_replace(':isLogin',
+                                              $isLoginConditionStr,
+                                              $this->orgIdIdentQuery);
+        $queryParams = array(
+          'coPersonId' => array($personId, PDO::PARAM_INT),
+        );
+        $stmt = $db->read($this->orgIdIdentQuery, $queryParams);
+
+        if ($stmt->execute()) {
+            if ($result = $stmt->fetchall(PDO::FETCH_GROUP|PDO::FETCH_ASSOC)) {
+                SimpleSAML_Logger::debug("[attrauthcomanage] getOrgIdentifiers: result="
+                                         . var_export($result, true));
+                return $result;
+            }
+        } else {
+            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+        }
+        return null;
+    }
+
+    /**
+     * Check whether the identifier fetched from the IdP is available in the list of my Identifiers
+     * and marked as a login identifier
+     *
+     * @param string $idpIdent Identifier provided by the Identity Provider
+     * @param array $identsList List of OrgIdentity Identifiers
+     *
+     * @return bool
+     */
+    private function isIdpIdentLogin($idpIdent, $identsList) {
+        if( empty($identsList) || empty($idpIdent)) {
+            return false;
+        }
+        foreach ($identsList as $identifierTypes) {
+            foreach($identifierTypes as $ident) {
+                if( $ident['identifier'] === $idpIdent
+                  && $ident['login']) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check whether the identifier fetched from the IdP has expired
+     * If valid from and valid through fields are empty we assume that the Identifier will never expire
+     *
+     * @param   string  $idpIdent    Identifier provided by the Identity Provider
+     * @param   array   $identsList  List of OrgIdentity Identifiers
+     *
+     * @return bool|null true(is expired), false(is not expired), null if either of the parameters are empty
+     * @throws Exception
+     * @todo make timezone configuration
+     */
+    private function isIdpIdentExpired($idpIdent, $identsList) {
+        if( empty($identsList) || empty($idpIdent)) {
+            return null;
+        }
+        foreach ($identsList as $identifierTypes) {
+            foreach($identifierTypes as $ident) {
+                if( $ident['identifier'] === $idpIdent) {
+                    SimpleSAML_Logger::debug("[attrauthcomanage] isIdpIdentExpired: org_valid_through = " . var_export($ident['org_valid_through'], true));
+                    SimpleSAML_Logger::debug("[attrauthcomanage] isIdpIdentExpired: org_valid_from = " . var_export($ident['org_valid_from'], true));
+                    $current_date = new DateTime('now', new DateTimeZone('Etc/UTC'));
+                    if (empty($ident['org_valid_from']) && empty($ident['org_valid_through'])) {
+                        return false;
+                    } elseif (empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
+                        $valid_through = new DateTime($ident['org_valid_through'], new DateTimeZone('Etc/UTC'));
+                        return !($valid_through >= $current_date);
+                    } elseif (!empty($ident['org_valid_from']) && empty($ident['org_valid_through'])) {
+                        $valid_from = new DateTime($ident['org_valid_from'], new DateTimeZone('Etc/UTC'));
+                        return !($current_date >= $valid_from);
+                    } elseif (!empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
+                        $valid_from = new DateTime($ident['org_valid_from'], new DateTimeZone('Etc/UTC'));
+                        $valid_through = new DateTime($ident['org_valid_through'], new DateTimeZone('Etc/UTC'));
+                        if ($valid_through >= $current_date
+                            && $current_date > $valid_from) {
+                            return false;
+                        } else {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+
+    /**
      * Execute the profileQuery and construct the result set
+     * #,name,family,mail_id,mail,verified,identifier,edupersonscopedaffiliation,org_mail_verifed
+     * CO Person name
+     * CO Person family name
+     * CO Person csv of mail ids/mail/verified flag
+     * CO Person identifer
+     * Org Identities csv of edupersonscopedaffiliation
+     * Org Identities csv of verified emails
      *
      * @param integer $personId
+     *
      * @return array|null
      * @throws Exception
      */
@@ -510,34 +529,34 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             if (!empty($attributes['mail'])) {
                 // Sort the mails by their row unique id(lowest to highest
-                $mail_list = array_combine(
-                    explode(',', $attributes['mail_id']),
-                    explode(',', $attributes['mail'])
-                );
-                if (ksort($mail_list)) {
-                    $state['Attributes']['mail'] = array(array_shift(($mail_list)));
-                } else {
-                    // Sorting failed return the first available
-                    $state['Attributes']['mail'] = array(
-                        explode(',', $attributes['mail'])[0]
-                    );
+                $mails = explode(',', $attributes['mail']);
+                $mails = array_filter($mails);
+                $pmail_list = array();
+                foreach($mails as $mail) {
+                    list($id, $email, $verified) = explode(':', $mail);
+                    $pmail_list[$id] = array($email => filter_var($verified, FILTER_VALIDATE_BOOLEAN));
                 }
-                unset($mail_list);
-                // XXX for the voPersonVerifiedEmail attribute we need an array with all the verified emails
-                if (!empty($attributes['verified'])) {
-                    $mail_list = array_combine(
-                        explode(',', $attributes['mail']),
-                        explode(',', $attributes['verified'])
-                    );
-                    $verified_mail_list = array_filter(
-                        $mail_list,
-                        static function ($verified) {
-                            return filter_var($verified, FILTER_VALIDATE_BOOLEAN) === true;
+                // XXX Sort and keep only the email and verified status.
+                $pmail_sorted_list = array();
+                if (ksort($pmail_list)) {
+                    foreach($pmail_list as $sorted_mails) {
+                        foreach($sorted_mails as $email => $verified) {
+                            $pmail_sorted_list[$email] = $verified;
                         }
-                    );
-                    if (!empty($verified_mail_list)) {
-                        $state['Attributes']['voPersonVerifiedEmail'] = array_keys($verified_mail_list);
                     }
+                }
+                // Get the oldest email in CO Person's profile
+                $pmail_sorted_list_keys = array_keys($pmail_sorted_list);
+                $state['Attributes']['mail'] = array(array_shift($pmail_sorted_list_keys));
+                // XXX for the voPersonVerifiedEmail attribute we need an array with all the verified emails
+                $verified_mail_list = array_filter(
+                    $pmail_sorted_list,
+                    static function ($verified, $mail) {
+                        return $verified === true;
+                    }, ARRAY_FILTER_USE_BOTH
+                );
+                if (!empty($verified_mail_list)) {
+                    $state['Attributes']['voPersonVerifiedEmail'] = array_keys($verified_mail_list);
                 }
             }
             if (!empty($attributes['edupersonscopedaffiliation'])) {
@@ -549,9 +568,28 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 $state['Attributes']['eduPersonScopedAffiliation'] = array_filter(array_unique($state['Attributes']['eduPersonScopedAffiliation']));
             }
             if (!empty($attributes['identifier'])) {
-                $state['Attributes']['uid'] = array($attributes['identifier']);
+                $identifiers = explode(',', $attributes['identifier']);
+                foreach ($identifiers as $ident) {
+                    $ident_key_val = explode(':', $ident, 2);
+                    if(!empty($this->attrMap)
+                        && array_key_exists($ident_key_val[0], $this->attrMap)) {
+                        $attribute_key = $this->attrMap[$ident_key_val[0]];
+                    } else {
+                        $attribute_key = $ident_key_val[0];
+                        SimpleSAML_Logger::debug("[attrauthcomanage] constructProfile: No attrMap mapping found for COmanage attribute:"
+                                                 . var_export($ident_key_val,true));
+                    }
+                    if( array_key_exists($attribute_key,$state['Attributes'])
+                        && !in_array($ident_key_val[1], $state['Attributes'][$attribute_key], true)) {
+                        $state['Attributes'][$attribute_key][] = $ident_key_val[1];
+                    } else {
+                        $state['Attributes'][$attribute_key] = array($ident_key_val[1]);
+                    }
+                }
             }
         }
+        SimpleSAML_Logger::debug("[attrauthcomanage] constructProfile: profile="
+                                 . var_export($state['Attributes'], true));
 
         return true;
     }
@@ -624,7 +662,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             . " LEFT OUTER JOIN cm_co_person_roles AS ROLE ON cous.id = role.cou_id"
             . " AND role.co_person_role_id IS NULL"
             . " AND role.status = 'A'"
-            . " AND NOT role.deleted    AND role.co_person_id = members.co_person_id"
+            . " AND NOT role.deleted AND role.co_person_id = members.co_person_id"
             . " GROUP BY"
             . " groups.name";
 
@@ -892,7 +930,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         foreach ($cou_tree_structure as $cou_id => $sub_tree) {
             // XXX Split the full path and encode each part.
             $parent_vo = array_values($sub_tree['path_full_list'])[0];
-            if (!in_array($parent_vo, $this->voWhitelist, true)) {
+            if (isset($this->voWhitelist) && !in_array($parent_vo, $this->voWhitelist, true)) {
                 continue;
             }
             // XXX Also exclude the ones that are admin groups
@@ -971,19 +1009,43 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
      */
     private function retrieveCOPersonData(&$state)
     {
+        $orgId = $state['Attributes'][$this->userIdAttribute][0];
         if (isset($state['basicInfo'])) {
             SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: " . var_export($state['basicInfo'], true));
             $basicInfo = $state['basicInfo'];
         } else {
-            $basicInfo = $this->_getBasicInfo($state['Attributes'][$this->userIdAttribute][0]);
+            $basicInfo = $this->getBasicInfo($orgId);
         }
-        $loginId = $this->_getLoginId($basicInfo['id']);
-        SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: loginId=" . var_export($loginId, true));
-        if ($loginId === null) {
+        // XXX Check if the Identifier created by UserId module is a login Identifier
+        // XXX Scenario: The user ID module creates an Identifier. We must check that this identifier is enlisted
+        // XXX in the list of available OrgIdentities of the CO Person and is a valid authenticator.
+        // XXX Upon success we return the Identifier of the COPerson
+        $orgIdentifiers = $this->getOrgIdentifiers($basicInfo['id'], $this->coOrgIdType, true);
+        SimpleSAML_Logger::debug('[attrauthcomanage] process: orgIdentifiers=' . var_export($orgIdentifiers, true));
+        if (!empty($orgIdentifiers)) {
+            $state['orgIndentifiersList'] = $orgIdentifiers;
+        }
+        // XXX Check if the identifier is an authenticator
+        if (!$this->isIdpIdentLogin($orgId, $orgIdentifiers)) {
             // Normally, this should not happen
-            throw new Exception('There is a problem with your EGI account. Please contact support for further assistance.');
+            $err_msg = 'The identifier <b>- ' . $orgId . ' -</b><br>is not present in your EGI account or is not a valid authenticator.<br>Please contact support for further assistance.';
+            throw new Exception($err_msg);
         }
+        // XXX Check if the identifier is valid or has expired
+        if ($this->isIdpIdentExpired($orgId, $orgIdentifiers)) {
+            // Normally, this should not happen
+            $err_msg = "The identifier <b>- " . $orgId . " -</b> is not a valid authenticator.";
+            $err_msg .= "<br>The subscription from <b>" . end($state['saml:AuthenticatingAuthority']) . "</b> expired.";
+            $err_msg .= "<br>Please contact support for further assistance.";
+            throw new Exception($err_msg);
+        }
+
+        $loginId = $this->getCoPersonIdentifier($basicInfo['id'], $this->coUserIdType);
+        SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: loginId=" . var_export($loginId, true));
+
         $state['Attributes'][$this->userIdAttribute] = array($loginId);
+        // XXX Create shortcuts for the basic USER data
+        $state['UserOrgID'] = $orgId;
         $state['UserID'] = $loginId;
 
         SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: constructProfile.");
@@ -992,10 +1054,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             return;
         }
 
-        SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: certificates.");
-        // todo: Should i also define the Certificate Model in the configuration
+        // XXX Get Certificate information
         if($this->certificate) {
-            // XXX Get Certificate information
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: certificates.");
             $certs = $this->getCerts($basicInfo['id']);
             foreach($certs as $cert) {
                 if(empty($cert['subject'])) {
@@ -1008,6 +1069,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     $state['Attributes']['distinguishedName'][] = $cert['subject'];
                 }
             }
+        } else {
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: Skipping certificates.");
         }
 
         SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: Group Memberships.");
@@ -1062,18 +1125,20 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 continue;
             }
             $vo_roles = array();
-            if (!in_array($cou['group_name'], $this->voWhitelist, true)) {
+            if (isset($this->voWhitelist) && !in_array($cou['group_name'], $this->voWhitelist, true)) {
                 // XXX Check if there is a root COU that is in the voWhitelist
                 // XXX :admins this is not part of the voWhiteList that's why i do not get forward
                 $parent_cou_name = $this->getCouRootParent($cou['group_name'], $nested_cous);
-                if (!in_array($parent_cou_name, $this->voWhitelist, true)
+                if (isset($this->voWhitelist)
+                    && !in_array($parent_cou_name, $this->voWhitelist, true)
                     && strpos($cou['group_name'], ':admins') === false) {
                     // XXX Remove a child COU that has no parent in the voWhitelist OR
                     // XXX Remove if it does not represent an admins group AND
                     unset($cou_memberships[$idx]);
                     continue;
                 }
-                if (!in_array($parent_cou_name, $this->voWhitelist, true)
+                if (isset($this->voWhitelist)
+                    && !in_array($parent_cou_name, $this->voWhitelist, true)
                     && !strpos($cou['group_name'], ':admins') === false) {
                     continue;
                 }
@@ -1292,16 +1357,150 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     }
 
     /**
-     * @param $e
+     * @param $config
+     * @param $validateConfigParamRules
      *
+     * @throws SimpleSAML_Error_Exception
+     */
+    private function validateConfigParams($config, $validateConfigParamRules) {
+        if(empty($config) || empty($validateConfigParamRules)) {
+            SimpleSAML_Logger::error("[attrauthcomanage] Config or validation Rules are missing.");
+            $this->showError(
+                "attrauthcomanage:attrauthcomanage:exception_CONFIG_VALIDATION_RULES_MISSING");
+        }
+
+        foreach ($validateConfigParamRules as $req_opt_key => $validation_list) {
+            if($req_opt_key === 'required') {
+                /*
+                 * MANDATORY ATTRIBUTES
+                 */
+                foreach($validation_list as $req_attr => $validation_rules) {
+                    if (!array_key_exists($req_attr, $config)) {
+                        SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: '" . $req_attr . "' not specified");
+                        $this->showError(
+                            "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_NOT_SPECIFIED",  ['%REQATTR%' => $req_attr]);
+                    }
+                    if (!$validation_rules['type']($config[$req_attr])) {
+                        SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: '" . $req_attr . "' wrong format(array required)");
+                        $this->showError(
+                            "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_WRONG_FORMAT", ['%REQATTR%' => $req_attr]);
+                    }
+                    if(array_key_exists('key_list', $validation_rules)) {
+                        $required_key_values = array_values($validation_rules['key_list']);
+                        $provided_keys = array_keys($config[$req_attr]);
+                        $non_provided_keys = array();
+                        foreach ($required_key_values as $req_key) {
+                            if (!in_array($req_key, $provided_keys)) {
+                                $non_provided_keys[] = $req_key;
+                            }
+                        }
+                        if (!empty($non_provided_keys) ) {
+                            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error:'" . $req_attr
+                                                     . "' key configuration errorRequired keys missing:"
+                                                     . implode(',', $non_provided_keys));
+                            $this->showError("attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_KEY_CONFIGURATION_ERROR", ['%REQATTR%' => $req_attr, '%NONKEYS%' => implode(',', $non_provided_keys)]);
+                        }
+
+                    }
+                    if(array_key_exists('value_filter',$validation_rules)) {
+                        $invalid_values = array();
+                        foreach ($config[$req_attr] as $value) {
+                            if(!filter_var($value, $validation_rules['value_filter'])) {
+                                $invalid_values[] = $value;
+                            }
+                        }
+                        if (!empty($invalid_values) ) {
+                            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error:'" . $req_attr . "' invalid value");
+                            $this->showError(
+                                "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_INVALID_VALUE", ['%REQATTR%' => $req_attr]);
+                        }
+
+                    }
+
+                    $this->$req_attr=$config[$req_attr];
+                }
+            } elseif ($req_opt_key === 'optional') {
+                /*
+                 *  OPTIONAL ATTRIBUTES
+                 */
+                foreach($validation_list as $opt_attr => $type) {
+                    if (array_key_exists($opt_attr, $config)) {
+                        if (!$type($config[$opt_attr])) {
+                            SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: " . $opt_attr . " not of type " . $type);
+                            $this->showError(
+                                "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_NOT_BOOLEAN", ['%OPTATTR%' => $opt_attr]);
+                        }
+                        $this->$opt_attr = $config[$opt_attr];
+                    }
+                }
+            }
+        }
+    }
+
+
+    /**
+     * Array of validation rules for the config params.
+     * Make changes here and not in the constructor
+     *
+     * @return string[][]
+     */
+    private function validateConfigParamRules() {
+        return array(
+            'required' => array(
+                'coId' => array(
+                    'type' => 'is_int'
+                ),
+                'urnNamespace' => array(
+                    'type' => 'is_string'
+                ),
+                'voRoles' => array(
+                    'type' => 'is_array'
+                ),
+                'urnAuthority' => array(
+                    'type' => 'is_string'
+                ),
+                'registryUrls' => array(
+                    'type' => 'is_array',
+                    'key_list' => array(
+                        'self_sign_up',
+                        'sign_up',
+                        'community_sign_up',
+                        'registry_login'
+                    ),
+                    'value_filter' => FILTER_VALIDATE_URL,
+                ),
+            ),
+            'optional' => array(
+                'attrMap' => 'is_array',
+                'coOrgIdType' => 'is_array',
+                'blacklist' => 'is_array',
+                'voWhitelist' => 'is_array',
+                'communityIdps' => 'is_array',
+                'voGroupPrefix' => 'is_array',
+                'coUserIdType' => 'is_string',
+                'userIdAttribute' => 'is_string',
+                'urnLegacy' => 'is_bool',
+                'certificate' => 'is_bool',
+                'mergeEntitlements' => 'is_bool',
+                'coTermsId' => 'is_int',
+            ),
+        );
+    }
+
+    /**
+     * @param $e
+     * @param $parameters
+     * 
      * @throws Exception
      */
-    private function _showException($e)
+    private function showError($e, $parameters = NULL)
     {
         $globalConfig = SimpleSAML_Configuration::getInstance();
         $t = new SimpleSAML_XHTML_Template($globalConfig, 'attrauthcomanage:exception.tpl.php');
-        $t->data['e'] = $e->getMessage();
+        $t->data['e'] = $e;
+        $t->data['parameters'] = (!empty($parameters) ? $parameters : "");
         $t->show();
         exit();
     }
+
 }
