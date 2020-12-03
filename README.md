@@ -123,6 +123,14 @@ Note: In case you need to change the format of the entitlements you need to modi
             ),
         ),
 ```
+### Overriding the default error definitions
+At ```templates/exception.tpl.php``` file you can comment out
+```
+$tag = preg_replace('/attrauthcomanage:/','yourthememodule:', $this->data['e'], 1);
+```
+replacing ```yourthememodule``` with the name of your theme module. 
+Also you must copy the ```attrauthcomanage.definition.json``` file under `yourthememodule/dictionaries` and then change the error messages in order to override the defaults.
+
 
 ## Compatibility matrix
 
