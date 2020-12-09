@@ -16,7 +16,7 @@
  *            'coTermsId' => 1,
  *            'coOrgIdType' => array('epuid'),
  *            'coUserIdType' => 'epuid',
- *            'userIdAttribute' => 'eduPersonUniqueId',
+ *            'userIdAttribute' => 'eduPersonPrincipalName',
  *            'voWhitelist' => array(
  *               'vo.example.com',
  *               'vo.example2.com',
@@ -65,7 +65,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $coUserIdType = 'epuid';
     private $coOrgIdType = array('epuid');
 
-    private $userIdAttribute = 'eduPersonUniqueId';
+    private $userIdAttribute = 'eduPersonPrincipalName';
 
     // List of VO names that should be included in entitlements.
     private $voWhitelist = null;
