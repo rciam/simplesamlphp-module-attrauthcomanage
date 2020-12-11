@@ -260,7 +260,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             $this->retrieveCOPersonData($state);
 
         } catch (\Exception $e) {
-            $this->_showException($e);
+            $this->showError($e);
         }
     }
 
