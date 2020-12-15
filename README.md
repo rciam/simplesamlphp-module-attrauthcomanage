@@ -57,23 +57,25 @@ Optionally, you can configure a database slave by editing the `database.slaves` 
 
 ### SimpleSAMLphp configuration
 The following authproc filter configuration options are supported:
-  * `coId`: Required, an integer containing the ID of the CO to use. There is no default value, must not be null.
-  * `coUserIdType`: Optional, a string that indicates the type of the identifier that the users have. Defaults to `epuid`.
-  * `coOrgIdType`: Optional, an array containing the Identifier types under the user's Organizational Identities. Defaults to `array('epuid')`.
-  * `coTermsId`: Optional, an integer that indicates the ID of the Terms Aggreement signed by the user for quering the COmanage Registry. Defaults to `null`.
-  * `userIdAttribute`: Optional, a string containing the name of the attribute whose value to use for querying the COmanage Registry. Defaults to `"eduPersonPrincipalName"`.
-  * `blacklist`: Optional, an array of strings that contains the SPs that the module will skip to process.
-  * `voWhitelist`: Optional, an array of strings that contains VOs (COUs) for which the module will generate entitlements. Defaults to `null`. If `null`, the voWhitelist check is skipped.
-  * `communityIdps`: Optional, an array of strings that contains the Entity Ids of trusted communities.
-  * `urnNamespace`: Required, a string to use as the URN namespace of the generated `eduPersonEntitlement` values containing group membership and role information.
-  * `voRoles`: Required, an array of default roles to be used for the composition of the entitlements.
-  * `voGroupPrefix`: Optional, an array of group prefixes per (CO)mmunity to be used for the composition of the entitlements. Defaults to `urlencode($co_name) . ":group"`.
-  * `urnAuthority`: Required, a string to use as the authority of the generated `eduPersonEntitlement` URN values containing group membership and role information.
-  * `registryUrls`: Required, an array of COmanage endpoints representing standard Enrollment Flow types. All the four endpoints are mandatory.
-  * `urnLegacy`: Optional, a boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
-  * `certificate`: Optional, a boolean value for controlling whether to fetch `Certificates` from User's Profile. Defaults to `false`.
-  * `mergeEntitlements`: Optional, a boolean to indicate whether the redundant `eduPersonEntitlement` will be removed from the state. Defaults to `false`.
-  * `attrMap`: Optional, An array of key,value pairs. These pairs constitute COmanage to SimpleSamlPHP attribute mappings. Currently ONLY Identifier attributes are supported. Defaults to `null`.
+ * Required:
+    * `coId`: An integer containing the ID of the CO to use. There is no default value, must not be null.
+    * `urnNamespace`: A string to use as the URN namespace of the generated `eduPersonEntitlement` values containing group membership and role information.
+    * `voRoles`: An array of default roles to be used for the composition of the entitlements.
+    * `urnAuthority`: A string to use as the authority of the generated `eduPersonEntitlement` URN values containing group membership and role information.
+    * `registryUrls`: An array of COmanage endpoints representing standard Enrollment Flow types. All the four endpoints are mandatory.
+ * Optional:
+    * `voGroupPrefix`: An array of group prefixes per (CO)mmunity to be used for the composition of the entitlements. Defaults to `urlencode($co_name) . ":group"`.
+    * `coUserIdType`: A string that indicates the type of the identifier that the users have. Defaults to `epuid`.
+    * `coOrgIdType`: An array containing the Identifier types under the user's Organizational Identities. Defaults to `array('epuid')`.
+    * `coTermsId`: An integer that indicates the ID of the Terms Aggreement signed by the user for quering the COmanage Registry. Defaults to `null`.
+    * `userIdAttribute`: A string containing the name of the attribute whose value to use for querying the COmanage Registry. Defaults to `"eduPersonPrincipalName"`.
+    * `blacklist`: An array of strings that contains the SPs that the module will skip to process. Defaults to `array()`.
+    * `voWhitelist`: An array of strings that contains VOs (COUs) for which the module will generate entitlements. Defaults to `null`. If `null`, the voWhitelist check is skipped.
+    * `communityIdps`: An array of strings that contains the Entity Ids of trusted communities. Defaults to `array()`.
+    * `urnLegacy`: A boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
+    * `certificate`: A boolean value for controlling whether to fetch `Certificates` from User's Profile. Defaults to `false`.
+    * `mergeEntitlements`: A boolean to indicate whether the redundant `eduPersonEntitlement` will be removed from the state. Defaults to `false`.
+    * `attrMap`: An array of key,value pairs. These pairs constitute COmanage to SimpleSamlPHP attribute mappings. Currently ONLY Identifier attributes are supported. Defaults to `null`.
 
 Note: In case you need to change the format of the entitlements you need to modify the source code.
 
@@ -136,14 +138,9 @@ Also you must copy the ```attrauthcomanage.definition.json``` file under `yourth
 
 This table matches the module version with the supported SimpleSAMLphp version.
 
-| Module |  SimpleSAMLphp |
-|:------:|:--------------:|
-| v1.0   | v1.14          |
-| v1.1   | v1.14          |
-| v1.2   | v1.14          |
-| v1.3   | v1.14          |
-| v1.4   | v1.14          |
-| v1.5   | v1.14          |
+| Module       |  SimpleSAMLphp |
+|:------------:|:--------------:|
+| v1.5 &#8806; | v1.14          |
 
 
 ## License
