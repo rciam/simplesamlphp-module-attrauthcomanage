@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+
+## [v1.5.5] - 2021-01-14
+
+### Fixed
+
+- Bug where retrieval of AUP information was skipped when the user had no COU or Group membership
+
+## [v1.5.4] - 2021-01-13
+
+### Added
+- User's Terms and Conditions/Acceptable Use Policy (AUP) information in state information
+- User's COPerson ID in state information
+- Support for retrieving user's SSH keys
+
 ## [v1.5.3] - 2020-12-04
 
 ### Added
@@ -103,12 +118,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Encode nested COUs in entitlements according to [AARC-G002](https://aarc-community.org/guidelines/aarc-g002)
 
+## [v2.0.1] - 2020-02-23
+
+### Fixed
+
+- Fixes target\_new URL redirect for self sign-up flow
+- Fixes evaluation of member and owner roles of COU admins group
+
 ## [v1.2.2] - 2020-02-23
 
 ### Fixed
 
 - Fixes target\_new URL redirect for self sign-up flow
 - Fixes evaluation of member and owner roles of COU admins group
+
+## [v2.0.0] - 2020-02-14
+
+### Changed
+
+- This version is compatible with [SimpleSAMLphp v1.17](https://simplesamlphp.org/docs/1.17/simplesamlphp-changelog) 
 
 ## [v1.2.1] - 2020-02-14
 

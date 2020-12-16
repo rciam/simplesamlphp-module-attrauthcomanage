@@ -24,16 +24,16 @@ The following authproc filter configuration options are supported:
 
 ### Example authproc filter configuration
 ```
-    authproc = array(
+    authproc = [
         ...
-        '60' => array(
+        '60' => [
              'class' => 'attrauthcomanage:COmanageRestClient',
              'apiBaseURL' => 'https://comanage.example.org/registry',
              'username' => 'bob',
              'password' => 'secret',
              'userIdAttribute => 'eduPersonUniqueId',
              'urnNamespace' => 'urn:mace:example.org',
-        ),
+        ],
 ```
 
 ## COmanage Database client
@@ -67,13 +67,14 @@ The following authproc filter configuration options are supported:
     * `voGroupPrefix`: An array of group prefixes per (CO)mmunity to be used for the composition of the entitlements. Defaults to `urlencode($co_name) . ":group"`.
     * `coUserIdType`: A string that indicates the type of the identifier that the users have. Defaults to `epuid`.
     * `coOrgIdType`: An array containing the Identifier types under the user's Organizational Identities. Defaults to `array('epuid')`.
-    * `coTermsId`: An integer that indicates the ID of the Terms Aggreement signed by the user for quering the COmanage Registry. Defaults to `null`.
+    * `retrieveAUP`: A boolean value for controlling whether to retrieve Terms & Conditions/Acceptable Use Policy (AUP) information from the COmanage Registry. When `true`, the retrieved AUP information is stored in the state - `$state['rciamAttributes']['aup']`. Defaults to `false`.
     * `userIdAttribute`: A string containing the name of the attribute whose value to use for querying the COmanage Registry. Defaults to `"eduPersonPrincipalName"`.
     * `blacklist`: An array of strings that contains the SPs that the module will skip to process. Defaults to `array()`.
     * `voWhitelist`: An array of strings that contains VOs (COUs) for which the module will generate entitlements. Defaults to `null`. If `null`, the voWhitelist check is skipped.
     * `communityIdps`: An array of strings that contains the Entity Ids of trusted communities. Defaults to `array()`.
     * `urnLegacy`: A boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
     * `certificate`: A boolean value for controlling whether to fetch `Certificates` from User's Profile. Defaults to `false`.
+    * `retrieveSshKeys`: A boolean value for controlling whether to retrieve SSH keys from User's Profile. Defaults to `false`.
     * `mergeEntitlements`: A boolean to indicate whether the redundant `eduPersonEntitlement` will be removed from the state. Defaults to `false`.
     * `attrMap`: An array of key,value pairs. These pairs constitute COmanage to SimpleSamlPHP attribute mappings. Currently ONLY Identifier attributes are supported. Defaults to `null`.
 
@@ -81,49 +82,51 @@ Note: In case you need to change the format of the entitlements you need to modi
 
 ### Example authproc filter configuration
 ```
-    authproc = array(
+    authproc = [
         ...
-        '60' => array(
+        '60' => [
             'class' => 'attrauthcomanage:COmanageDbClient',
             'coId' => 2,
             'coUserIdType' => 'epuid',            // COmanage terminology
-            'coUserIdType' => array('epuid'),     // COmanage terminology
+            'coUserIdType' => ['epuid'],     // COmanage terminology
             'userIdAttribute' => 'eduPersonUniqueId',
-            'blacklist' => array(
+            'retrieveAUP' => true,
+            'blacklist' => [
                 'https://www.example.org/sp',
-            ),
-            'voWhitelist' => array(
+            ],
+            'voWhitelist' => [
                 'vo.example.org',
-            ),
-            'communityIdps' => array(
+            ],
+            'communityIdps' => [
                'https://example1.com/idp',
-            ),
-            'voRoles' => array(
+            ],
+            'voRoles' => [
                 'member',
                 'faculty',
-            ),
-            'voGroupPrefix' => array(
+            ],
+            'voGroupPrefix' => [
                3 => 'registry',
-            ),
+            ],
             'urnNamespace' => 'urn:mace:example.org',
             'urnAuthority' => 'example.eu',
             'mergeEntitlements' => false,
             'certificate' => false,
-            'registryUrls' => array(
+            'retrieveSshKeys' => true,
+            'registryUrls' => [
                'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1', // Required
                'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2', // Required
                'community_sign_up' => 'https://example.com/registry/co_petitions/start/coef:3', // Required
                'registry_login'    => 'https://example.com/registry/co_petitions/auth/login',   // Required
-            ),
+            ],
             // Currently only Indentifier attributes are supported, like
-            'attrMap' => array(
+            'attrMap' => [
                'eppn' => 'eduPersonPrincipalName',
                'eptid' => 'eduPersonTargetedID',
                'epuid' => 'eduPersonUniqueId',
                'orcid' => 'eduPersonOrcid',
                'uid' => 'uid',
-            ),
-        ),
+            ],
+        ],
 ```
 ### Overriding the default error definitions
 At ```templates/exception.tpl.php``` file you can comment out
@@ -138,9 +141,10 @@ Also you must copy the ```attrauthcomanage.definition.json``` file under `yourth
 
 This table matches the module version with the supported SimpleSAMLphp version.
 
-| Module       |  SimpleSAMLphp |
-|:------------:|:--------------:|
-| v1.5 &#8806; | v1.14          |
+| Module   |  SimpleSAMLphp |
+|:--------:|:--------------:|
+| v1.x     | v1.14          |
+| v2.x     | v1.17          |
 
 
 ## License
