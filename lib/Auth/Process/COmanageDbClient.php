@@ -39,6 +39,7 @@
  *               'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1',
  *               'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2',
  *               'community_sign_up' => 'https://example.com/registry/co_petitions/start/coef:3',
+ *               'community_sign_up_no_aff' => 'https://example.com/registry/co_petitions/start/coef:4',
  *               'registry_login'    => 'https://example.com/registry/co_petitions/auth/login',
  *            ),
  *            // Currently only Indentifier attributes are supported, like
@@ -251,8 +252,17 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                   $callback = SimpleSAML_Module::getModuleURL('attrauthcomanage/idp_callback.php', array('stateId' => $id));
                   SimpleSAML_Logger::debug("[attrauthcomanage] process: callback url => " . $callback);
                   $params = array("targetnew" => $callback);
+                  // Check if community signup is required
                   if (!empty($state['saml:AuthenticatingAuthority']) && in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)) {
-                    \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
+                      // Redirect to community signup flow with all
+                      // attributes available including affiliation
+                      if (!empty($state['Attributes']['voPersonExternalAffiliation'])
+                          && !empty($state['Attributes']['mail'])
+                          && !empty($state['Attributes']['givenName'])
+                          && !empty($state['Attributes']['sn'])) {
+                          \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
+                       }
+                       \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['community_sign_up_no_aff'], $params);
                   }
                   $this->_redirect($basicInfo, $state, $params);
             }
