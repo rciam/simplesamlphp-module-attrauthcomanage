@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - User's Terms and Conditions/Acceptable Use Policy (AUP) information in state information
 - User's COPerson ID in state information
-
+- Add support for sshPublicKey attribute
 
 ## [v1.5.3] - 2020-12-04
 
