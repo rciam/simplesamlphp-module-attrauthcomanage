@@ -3,7 +3,7 @@
 class sspmod_attrauthcomanage_Attributes_SshPublicKey
 {
 
-    private $SSH_PUBLIC_KEY_TYPE = array(
+    public static $SSH_PUBLIC_KEY_TYPE = array(
         'DSA' => 'ssh-dss',
         'ECDSA' => 'ecdsa-sha2-nistp256',
         'ECDSA384' => 'ecdsa-sha2-nistp384',
@@ -49,8 +49,8 @@ class sspmod_attrauthcomanage_Attributes_SshPublicKey
         return $result;
     }
 
-    public function getSshPublicKeyType($key)
+    public static function getSshPublicKeyType($key)
     {
-        return $this->SSH_PUBLIC_KEY_TYPE[$key];
+        return self::$SSH_PUBLIC_KEY_TYPE[$key];
     }
 }
