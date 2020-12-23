@@ -1144,8 +1144,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             $sshPublicKeys = $attrSshPublicKey->getSshPublicKeys($basicInfo['id']);
             foreach($sshPublicKeys as $sshKey) {
                 if(!empty($sshKey['skey']) && !empty($sshKey['type'])) {
-                    // $keyType = sspmod_attrauthcomanage_Attributes_SshPublicKeyTypeEnum::fromName($sshKey['type']);
-                    $sshPublicKey = $attrSshPublicKey->getSshPublicKeyType($sshKey['type']) . ' ' . $sshKey['skey'] . ' ' . $sshKey['comment'];
+                    $sshPublicKey = $attrSshPublicKey->getSshPublicKeyType($sshKey['type']) . ' ' . $sshKey['skey']
+                    . ( !empty($sshKey['comment']) ? ' ' . $sshKey['comment'] : '' );
                     if(!array_key_exists('sshPublicKey', $state['Attributes'])) {
                         $state['Attributes']['sshPublicKey'] = array();
                     }
