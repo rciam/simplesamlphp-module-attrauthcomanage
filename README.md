@@ -4,8 +4,7 @@ A SimpleSAMLphp module for retrieving attributes from [COmanage Registry](https:
 In a nuthshell, this module provides a set of SimpleSAMLphp authentication processing filters allowing to use COmanage Registry as an Attribute Authority. Specifically, the module supports retrieving the following user information from COmanage:
   * CO person profile information, including login identifiers
   * CO group membership information, which is encapsulated in `eduPersonEntitlement` attribute values following the [AARC-G002](https://aarc-community.org/guidelines/aarc-g002/) specification
-
-To this end, the above information can be retrieved through the COmanage Registry REST API. Support for directly querying the COmanage Registry DB is also foreseen.
+  * Terms & Conditions/Acceptable Use Policy (AUP) information
 
 ## COmanage REST API client
 The `attrauthcomanage:COmanageRestClient` authentication processing filter is implemented as a COmanage Registry REST API client. As such, it needs to authenticate via a simple user/password pair transmitted over HTTPS as part of a basic auth flow. For details, see https://spaces.internet2.edu/display/COmanage/REST+API
@@ -67,21 +66,15 @@ The following authproc filter configuration options are supported:
     * `voGroupPrefix`: An array of group prefixes per (CO)mmunity to be used for the composition of the entitlements. Defaults to `urlencode($co_name) . ":group"`.
     * `coUserIdType`: A string that indicates the type of the identifier that the users have. Defaults to `epuid`.
     * `coOrgIdType`: An array containing the Identifier types under the user's Organizational Identities. Defaults to `array('epuid')`.
-    * `retrieveAUP`: A boolean value to retrieve Terms & Conditions/Acceptable Use Policy (AUP) information from COmanage Registry. When `true`, the retrieved AUP information is stored in the state - `$state['rciamAttributes']['aup']`. Defaults to `false`.
+    * `retrieveAUP`: A boolean value for controlling whether to retrieve Terms & Conditions/Acceptable Use Policy (AUP) information from the COmanage Registry. When `true`, the retrieved AUP information is stored in the state - `$state['rciamAttributes']['aup']`. Defaults to `false`.
     * `userIdAttribute`: A string containing the name of the attribute whose value to use for querying the COmanage Registry. Defaults to `"eduPersonPrincipalName"`.
     * `blacklist`: An array of strings that contains the SPs that the module will skip to process. Defaults to `array()`.
     * `voWhitelist`: An array of strings that contains VOs (COUs) for which the module will generate entitlements. Defaults to `null`. If `null`, the voWhitelist check is skipped.
-    * `communityIdps`: An array of strings that contains the Entity Ids of trusted communities. Defaults to `array()`.
+    * `communityIdps`: An array of strings that contains the Entity Ids of trusted community IdPs. Defaults to `array()`.
     * `urnLegacy`: A boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
     * `certificate`: A boolean value for controlling whether to fetch `Certificates` from User's Profile. Defaults to `false`.
     * `mergeEntitlements`: A boolean to indicate whether the redundant `eduPersonEntitlement` will be removed from the state. Defaults to `false`.
     * `attrMap`: An array of key,value pairs. These pairs constitute COmanage to SimpleSamlPHP attribute mappings. Currently ONLY Identifier attributes are supported. Defaults to `null`.
-
-:warning: | In case you need to change the format of the entitlements you need to modify the source code.
-:---: | :---
-
-:information_source: | Schema of introduced Models can be found under `Models` directory.
-:---: | :---
 
 ### Example authproc filter configuration
 ```
@@ -142,8 +135,8 @@ Also you must copy the ```attrauthcomanage.definition.json``` file under `yourth
 The filter adds the following attributes to the state information that SimpleSAMLphp stores in association with the request:
 ```php
 $state['rciamAttributes'] => array(
-    'registryUserId' => // User's COPerson ID 
-    'aup' => array( ...
+    'registryUserId' => User's COPerson ID 
+    'aup'            => AUP information relevant for the user - see docs/model/aup.md
 )
 ```
 
@@ -152,9 +145,10 @@ $state['rciamAttributes'] => array(
 
 This table matches the module version with the supported SimpleSAMLphp version.
 
-| Module       |  SimpleSAMLphp |
-|:------------:|:--------------:|
-| v1.5 &#8806; | v1.14          |
+| Module  |  SimpleSAMLphp |
+|:-------:|:--------------:|
+| v1.x    | v1.14          |
+| v2.x    | v1.17          |
 
 
 ## License

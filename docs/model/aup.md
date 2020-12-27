@@ -28,17 +28,17 @@ AUP Model stored in the state, `$state['rciamAttributes']['aup']`
 }
 ```
 <pre>
-* id              Id of the AUP in the Registry Database
-* description     Short description
-* url             URL  containing the HTML representation of the AUP content
-* modified        Date the AUP was last modified
+* id              Id of the AUP in the COmanage Registry
+* description     Short description of the AUP
+* url             URL pointing to the AUP webpage
+* modified        Date when the AUP was last modified in the COmanage Registry
 * vo
   * id            Id of the VO associated with this AUP
-  * name          Name of the VO
-* verson          Current version of the AUP
+  * name          Name of the VO associated with this AUP
+* version         Current version of the AUP
 * agreed
   * id            Id of the AUP agreement
   * aup_id        Id of the last agreed AUP
-  * date          The date the AUP agreement was signed
-  * version       The version of the agreed AUP
+  * date          Date when the AUP agreement was signed
+  * version       Version of the agreed AUP
 </pre>
