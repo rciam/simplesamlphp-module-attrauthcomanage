@@ -1348,8 +1348,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 $cou = array_filter(
                     $co_memberships,
                     static function($group) use ($cou_id) {
-                        if ((int)$group['cou_id'] == (int)$cou_id
-                           && strpos(':admins', $group['group_name']) === false) {
+                        if ((int)$group['cou_id'] === (int)$cou_id
+                            && strpos($group['group_name'], ':admins') === false) {
                             return $group;
                         }
                     }
