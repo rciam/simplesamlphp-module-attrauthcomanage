@@ -73,6 +73,7 @@ The following authproc filter configuration options are supported:
     * `communityIdps`: An array of strings that contains the Entity Ids of trusted community IdPs. Defaults to `array()`.
     * `urnLegacy`: A boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
     * `certificate`: A boolean value for controlling whether to fetch `Certificates` from User's Profile. Defaults to `false`.
+    * `retrieveSshKeys`: A boolean value for controlling whether to retrieve SSH keys from User's Profile. Defaults to `false`.
     * `mergeEntitlements`: A boolean to indicate whether the redundant `eduPersonEntitlement` will be removed from the state. Defaults to `false`.
     * `attrMap`: An array of key,value pairs. These pairs constitute COmanage to SimpleSamlPHP attribute mappings. Currently ONLY Identifier attributes are supported. Defaults to `null`.
 
@@ -107,6 +108,7 @@ The following authproc filter configuration options are supported:
             'urnAuthority' => 'example.eu',
             'mergeEntitlements' => false,
             'certificate' => false,
+            'retrieveSshKeys' => false,
             'registryUrls' => array(
                'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1', // Required
                'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2', // Required

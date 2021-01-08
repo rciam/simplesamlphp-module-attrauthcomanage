@@ -35,6 +35,7 @@
  *            'retrieveAUP' => true,
  *            'mergeEntitlements' => false,
  *            'certificate' => false,
+ *            'retrieveSshKeys' => false,
  *            'registryUrls' => array(
  *               'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1',
  *               'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2',
@@ -74,6 +75,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $urnNamespace = null;
     private $urnAuthority = null;
     private $certificate = false;
+    private $retrieveSshKeys = false;
     private $registryUrls = array();
     private $communityIdps = array();
     private $mergeEntitlements = false;
@@ -1135,6 +1137,27 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: Skipping certificates.");
         }
 
+        // Get SSH Public Key information
+        if($this->retrieveSshKeys) {
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: sshPublicKeys.");
+            $attrSshPublicKey = new sspmod_attrauthcomanage_Attributes_SshPublicKey();
+            $sshPublicKeys = $attrSshPublicKey->getSshPublicKeys($basicInfo['id']);
+            foreach($sshPublicKeys as $sshKey) {
+                if(!empty($sshKey['skey']) && !empty($sshKey['type'])) {
+                    $sshPublicKey = $attrSshPublicKey->getSshPublicKeyType($sshKey['type']) . ' ' . $sshKey['skey']
+                    . ( !empty($sshKey['comment']) ? ' ' . $sshKey['comment'] : '' );
+                    if(!array_key_exists('sshPublicKey', $state['Attributes'])) {
+                        $state['Attributes']['sshPublicKey'] = array();
+                    }
+                    if(!in_array($sshPublicKey, $state['Attributes']['sshPublicKey'], true)) {
+                        $state['Attributes']['sshPublicKey'][] = $sshPublicKey;
+                    }
+                }
+            }
+        } else {
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: Skipping sshPublicKeys.");
+        }
+
         SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: Group Memberships.");
         // XXX Get all the memberships from the the CO for the user
         $this->coGroupMemberships = $this->getMemberships($this->coId, $basicInfo['id']);
@@ -1680,6 +1703,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 'userIdAttribute' => 'is_string',
                 'urnLegacy' => 'is_bool',
                 'certificate' => 'is_bool',
+                'retrieveSshKeys' => 'is_bool',
                 'mergeEntitlements' => 'is_bool',
                 'retrieveAUP' => 'is_bool',
             ),
