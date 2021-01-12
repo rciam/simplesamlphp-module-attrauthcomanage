@@ -25,7 +25,7 @@ AUP Model is stored in the state, `$state['rciamAttributes']['aup']`. In additio
       "agreed":
       {
         "id": "<cm_co_t_and_c_agreements::id>",
-        "aup_id": "<cm_co_t_and_c_agreements::co_terms_and_conditions_id>",
+        "aupId": "<cm_co_t_and_c_agreements::co_terms_and_conditions_id>",
         "date": "<cm_co_t_and_c_agreements::agreement_time>",
         "version": "<cm_co_terms_and_conditions::cm_co_terms_and_conditions_id::revision>"
       }
@@ -44,7 +44,7 @@ AUP Model is stored in the state, `$state['rciamAttributes']['aup']`. In additio
 * version         Current version of the AUP
 * agreed          Information on the last agreement for this AUP
   * id            Id of the AUP agreement
-  * aup_id        Id of the last agreed AUP
+  * aupId         Id of the last agreed AUP
   * date          Date when the AUP agreement was signed
   * version       Version of the agreed AUP
 </pre>
