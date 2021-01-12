@@ -1328,7 +1328,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
      *         "agreed": // AUP user agreement information; null if there is no agreement
      *         {
      *           "id": "<cm_co_t_and_c_agreements::id>", // Id of agreement
-     *           "aup_id":"<cm_co_t_and_c_agreements::co_terms_and_conditions_id>", // Latest AUP ID agreed
+     *           "aupId":"<cm_co_t_and_c_agreements::co_terms_and_conditions_id>", // Latest AUP ID agreed
      *           "date":"<cm_co_t_and_c_agreements::agreement_time>" // Date of agreement
      *           "version":" <cm_co_t_and_c_agreements::cm_co_terms_and_conditions_id::revision>" // AUP agreed version
      *         },
@@ -1384,7 +1384,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
             $tmp['agreed'] = null;
             if (!empty($aup['agreement_id_last_agreement_aupid_time'])) {
-                list($tmp['agreed']['id'], $tmp['agreed']['aup_id'], $tmp['agreed']['date']) = explode('::', $aup['agreement_id_last_agreement_aupid_time']);
+                list($tmp['agreed']['id'], $tmp['agreed']['aupId'], $tmp['agreed']['date']) = explode('::', $aup['agreement_id_last_agreement_aupid_time']);
                 $tmp['agreed']['version'] = !empty($aup['last_aggrement_aupid_revision'])
                                             ? $aup['last_aggrement_aupid_revision'] : $aup['revision'];
             }
