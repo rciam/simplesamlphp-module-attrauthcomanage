@@ -13,10 +13,9 @@
  *       '60' => array(
  *            'class' => 'attrauthcomanage:COmanageDbClient',
  *            'coId' => 2,
- *            'coTermsId' => 1,
  *            'coOrgIdType' => array('epuid'),
  *            'coUserIdType' => 'epuid',
- *            'userIdAttribute' => 'eduPersonUniqueId',
+ *            'userIdAttribute' => 'eduPersonPrincipalName',
  *            'voWhitelist' => array(
  *               'vo.example.com',
  *               'vo.example2.com',
@@ -33,8 +32,10 @@
  *            ),
  *            'urnNamespace' => 'urn:mace:example.eu',
  *            'urnAuthority' => 'example.eu',
+ *            'retrieveAUP' => true,
  *            'mergeEntitlements' => false,
  *            'certificate' => false,
+ *            'retrieveSshKeys' => false,
  *            'registryUrls' => array(
  *               'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1',
  *               'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2',
@@ -62,11 +63,11 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $blacklist = array();
 
     private $coId;
-    private $coTermsId = null;
+    private $retrieveAUP = false;
     private $coUserIdType = 'epuid';
     private $coOrgIdType = array('epuid');
 
-    private $userIdAttribute = 'eduPersonUniqueId';
+    private $userIdAttribute = 'eduPersonPrincipalName';
 
     // List of VO names that should be included in entitlements.
     private $voWhitelist = null;
@@ -75,6 +76,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $urnNamespace = null;
     private $urnAuthority = null;
     private $certificate = false;
+    private $retrieveSshKeys = false;
     private $registryUrls = array();
     private $communityIdps = array();
     private $mergeEntitlements = false;
@@ -194,12 +196,81 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . ' AND cert.cert_id IS NULL'
         . ' AND NOT cert.deleted';
 
-    private $termsAgreementQuery = "select terms.agreement_time"
-        . " from cm_co_t_and_c_agreements terms"
-        . " where"
-        . " terms.co_person_id = :coPersonId"
-        . " and terms.co_terms_and_conditions_id = :coTermsId";
+    private $termsAgreementRevisionedQuery = "select cctac.id,"
+        . " cctac.description,"
+        . " cctac.modified,"
+        . " cctac.cou_id,"
+        . " cctac.url,"
+        . " cctac.revision,"
+        . " (select (id::text || '::' || co_terms_and_conditions_id::text || '::' || agreement_time::text) as agreement_id_last_agreement_aupid_and_time"
+        . " from cm_co_t_and_c_agreements"
+        . " where co_person_id = :coPersonId"
+        . " and co_terms_and_conditions_id in (select id"
+        . " from cm_co_terms_and_conditions"
+        . " where co_terms_and_conditions_id = cctac.id)"
+        . " order by agreement_time desc"
+        . " limit 1) as agreement_id_last_agreement_aupid_time,"
+        . " (select revision from cm_co_terms_and_conditions where id = (select co_terms_and_conditions_id"
+        . " from cm_co_t_and_c_agreements"
+        . " where co_person_id = :coPersonId"
+        . " and co_terms_and_conditions_id in (select id"
+        . " from cm_co_terms_and_conditions"
+        . " where co_terms_and_conditions_id = cctac.id)"
+        . " order by agreement_time desc"
+        . " limit 1)) as last_aggrement_aupid_revision"
+        . " from cm_co_terms_and_conditions as cctac"
+        . " inner join cm_co_people ccp on cctac.co_id = ccp.co_id and"
+        . " not ccp.deleted and"
+        . " ccp.co_person_id is null and"
+        . " not cctac.deleted and"
+        . " cctac.co_terms_and_conditions_id is null"
+        . " where ccp.id = :coPersonId"
+        . " and cctac.status = 'A'"
+        . " and (cctac.cou_id IN (select ccpr.cou_id"
+        . " from cm_co_person_roles as ccpr"
+        . " where ccpr.co_person_id = :coPersonId"
+        . " and not ccpr.deleted"
+        . " and ccpr.co_person_role_id is null"
+        . " ) or cctac.cou_id is null)"
+        . " and cctac.id NOT IN ("
+        . " select distinct cctaca.co_terms_and_conditions_id"
+        . " from cm_co_t_and_c_agreements as cctaca"
+        . " inner join cm_co_terms_and_conditions c on cctaca.co_terms_and_conditions_id = c.id"
+        . " and cctaca.co_person_id = :coPersonId);";
 
+
+    private $termsAgreementValidQuery = "select cctac.id,"
+        . " cctac.description,"
+        . " cctac.modified,"
+        . " cctac.cou_id,"
+        . " cctac.url,"
+        . " cctac.revision,"
+        . " (select (id::text || '::' || co_terms_and_conditions_id::text || '::' || agreement_time::text) as agreement_id_last_agreement_aupid_and_time"
+        . " from cm_co_t_and_c_agreements"
+        . " where co_terms_and_conditions_id = cctac.id"
+        . " and co_person_id = :coPersonId"
+        . " order by agreement_time desc"
+        . " limit 1) as agreement_id_last_agreement_aupid_time"
+        . " from cm_co_terms_and_conditions as cctac"
+        . " inner join cm_co_people ccp on cctac.co_id = ccp.co_id and"
+        . " not ccp.deleted and"
+        . " ccp.co_person_id is null and"
+        . " not cctac.deleted and"
+        . " cctac.co_terms_and_conditions_id is null"
+        . " where ccp.id = :coPersonId"
+        . " and cctac.status = 'A'"
+        . " and (cctac.cou_id IN ("
+        . " select ccpr.cou_id"
+        . " from cm_co_person_roles as ccpr"
+        . " where ccpr.co_person_id = :coPersonId"
+        . " and not ccpr.deleted"
+        . " and ccpr.co_person_role_id is null"
+        . " ) or cctac.cou_id is null)"
+        . " and cctac.id IN ("
+        . " select distinct cctaca.co_terms_and_conditions_id"
+        . " from cm_co_t_and_c_agreements as cctaca"
+        . " inner join cm_co_terms_and_conditions c on cctaca.co_terms_and_conditions_id = c.id"
+        . " and cctaca.co_person_id = :coPersonId);";
 
     public function __construct($config, $reserved)
     {
@@ -270,7 +341,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             $this->retrieveCOPersonData($state);
 
         } catch (\Exception $e) {
-            $this->_showException($e);
+            $this->showError($e);
         }
     }
 
@@ -1016,6 +1087,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         } else {
             $basicInfo = $this->getBasicInfo($orgId);
         }
+        // XXX Add CO Person Id in the state
+        $state['rciamAttributes']['registryUserId'] = $basicInfo['id'];
+
         // XXX Check if the Identifier created by UserId module is a login Identifier
         // XXX Scenario: The user ID module creates an Identifier. We must check that this identifier is enlisted
         // XXX in the list of available OrgIdentities of the CO Person and is a valid authenticator.
@@ -1071,6 +1145,27 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             }
         } else {
             SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: Skipping certificates.");
+        }
+
+        // Get SSH Public Key information
+        if($this->retrieveSshKeys) {
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: sshPublicKeys.");
+            $attrSshPublicKey = new sspmod_attrauthcomanage_Attributes_SshPublicKey();
+            $sshPublicKeys = $attrSshPublicKey->getSshPublicKeys($basicInfo['id']);
+            foreach($sshPublicKeys as $sshKey) {
+                if(!empty($sshKey['skey']) && !empty($sshKey['type'])) {
+                    $sshPublicKey = $attrSshPublicKey->getSshPublicKeyType($sshKey['type']) . ' ' . $sshKey['skey']
+                    . ( !empty($sshKey['comment']) ? ' ' . $sshKey['comment'] : '' );
+                    if(!array_key_exists('sshPublicKey', $state['Attributes'])) {
+                        $state['Attributes']['sshPublicKey'] = array();
+                    }
+                    if(!in_array($sshPublicKey, $state['Attributes']['sshPublicKey'], true)) {
+                        $state['Attributes']['sshPublicKey'][] = $sshPublicKey;
+                    }
+                }
+            }
+        } else {
+            SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: Skipping sshPublicKeys.");
         }
 
         SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: Group Memberships.");
@@ -1216,10 +1311,97 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         }
 
         // XXX Terms Agreement
-        if (!empty($this->coTermsId)) {
-            $termsAgreement = $this->getTermsAgreement($basicInfo['id'], $this->coTermsId);
-            $state['Attributes']['termsAccepted'] = empty($termsAgreement) ? array(false) : array(true);
+        if ($this->retrieveAUP) {
+            $termsAgreementRevised = $this->getTermsAgreementRevisioned($basicInfo['id']);
+            $termsAgreementValid = $this->getTermsAgreementValid($basicInfo['id']);
+            // Construct the AUP model and append it into the state, $state['aup']
+            $this->constructAupStatus($termsAgreementValid, $termsAgreementRevised, $this->coGroupMemberships, $state);
         }
+    }
+
+    /**
+     * Construct AUP status model
+     * {
+     *   "aup":
+     *     [
+     *       {
+     *         "id":"<cm_co_terms_and_conditions::id>", // AUP ID
+     *         "description":"<cm_co_terms_and_conditions::description>", // AUP description
+     *         "modified":"<cm_co_terms_and_conditions::modified>", // AUP modification timestamp
+     *         "url":"cm_co_terms_and_conditions::url", // AUP content
+     *         "vo": // null when AUP is not VO-specific
+     *         {
+     *           "id":"<cm_cous::id>", // VO ID
+     *           "name":"<cm_cous::name>" // VO name
+     *         },
+     *         "version":cm_co_terms_and_conditions::revision, // AUP current version
+     *         "agreed": // AUP user agreement information; null if there is no agreement
+     *         {
+     *           "id": "<cm_co_t_and_c_agreements::id>", // Id of agreement
+     *           "aupId":"<cm_co_t_and_c_agreements::co_terms_and_conditions_id>", // Latest AUP ID agreed
+     *           "date":"<cm_co_t_and_c_agreements::agreement_time>" // Date of agreement
+     *           "version":" <cm_co_t_and_c_agreements::cm_co_terms_and_conditions_id::revision>" // AUP agreed version
+     *         },
+     *       }
+     *     ]
+     *   }
+     * @param array $accepted_aup
+     * @param array $pending_aup
+     * @param array $co_memberships
+     * @param array $state
+     */
+    private function constructAupStatus($accepted_aup, $pending_aup, $co_memberships, &$state)
+    {
+        $state['rciamAttributes']['aup'] = array();
+        if (empty($accepted_aup)) {
+            $accepted_aup = array();
+        }
+        if (empty($pending_aup)) {
+            $pending_aup = array();
+        }
+
+        $all_aups = array_merge($accepted_aup, $pending_aup);
+
+        if (empty($all_aups)) {
+            return;
+        }
+
+        foreach($all_aups as $aup) {
+            $tmp_aup = array();
+            $tmp['id'] = $aup['id'];
+            $tmp['description'] = $aup['description'];
+            $tmp['modified'] = $aup['modified'];
+            $tmp['url'] = $aup['url'];
+            $tmp['version'] = $aup['revision'];
+            $tmp['vo'] = null;
+            if (!empty($aup['cou_id']) && $aup['cou_id'] > 0) {
+                $tmp['vo'] = array();
+                $tmp['vo']['id'] = $aup['cou_id'];
+                $cou_id = $aup['cou_id'];
+                $cou = array_filter(
+                    $co_memberships,
+                    static function($group) use ($cou_id) {
+                        if ((int)$group['cou_id'] === (int)$cou_id
+                            && strpos($group['group_name'], ':admins') === false) {
+                            return $group;
+                        }
+                    }
+                );
+                if (isset($cou) && is_array($cou)) {
+                    $cou = array_values($cou);
+                    $tmp['vo']['name'] = $cou[0]['group_name'];
+                }
+            }
+            $tmp['agreed'] = null;
+            if (!empty($aup['agreement_id_last_agreement_aupid_time'])) {
+                list($tmp['agreed']['id'], $tmp['agreed']['aupId'], $tmp['agreed']['date']) = explode('::', $aup['agreement_id_last_agreement_aupid_time']);
+                $tmp['agreed']['version'] = !empty($aup['last_aggrement_aupid_revision'])
+                                            ? $aup['last_aggrement_aupid_revision'] : $aup['revision'];
+            }
+            $state['rciamAttributes']['aup'][] = $tmp;
+        }
+        SimpleSAML_Logger::debug("[attrauthcomanage] constructAupStatus::state['rciamAttributes']['aup'] => " . var_export($state['rciamAttributes']['aup'], true));
+
     }
 
     /**
@@ -1324,29 +1506,78 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     }
 
     /**
+     * Column Names [id, description, modified, cou_id, url, revision, last_aggrement_aupid_and_time(id::agreement_time)]
+     * id(cm_co_terms_and_conditions):                              ID in the database of the Terms and Conditions entry
+     * description(cm_co_terms_and_conditions):                     Short description of the T&C entry
+     * modified(cm_co_terms_and_conditions):                        The date of latest update
+     * cou_id(cm_co_terms_and_conditions):                          null if not related to a COU an integer of the COU id otherwise
+     * url(cm_co_terms_and_conditions):                             the url of the Terms&Condition document
+     * revision(cm_co_terms_and_conditions):                        Indicates the number of times this T&C was revised
+     * last_aggrement_aupid_and_time(cm_co_t_and_c_agreements):     co_terms_and_conditions_id::agreement_time pair of the last accepted T&C and the exact date of acceptance
+     *
      * @param integer $personId
-     * @param integer $coTermsId
      *
      * @return array
      * @throws Exception
+     *
      */
-    private function getTermsAgreement($personId, $coTermsId)
+    private function getTermsAgreementValid($personId)
     {
-        SimpleSAML_Logger::debug("[attrauthcomanage] getTermsAgreement: personId="
+        SimpleSAML_Logger::debug("[attrauthcomanage] getTermsAgreementValid: personId="
+                                 . var_export($personId, true));
+
+        $result = array();
+        $db = SimpleSAML\Database::getInstance();
+        $queryParams = array(
+            'coPersonId' => array($personId, PDO::PARAM_INT),
+        );
+        $stmt = $db->read($this->termsAgreementValidQuery, $queryParams);
+        if ($stmt->execute()) {
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $result[] = $row;
+            }
+            SimpleSAML_Logger::debug("[attrauthcomanage] getTermsAgreementValid: result="
+                                     . var_export($result, true));
+            return $result;
+        } else {
+            throw new Exception('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
+        }
+
+        return $result;
+    }
+
+    /**
+     * Column Names [id, description, modified, cou_id, url, revision, last_aggrement_aupid_and_time(id::agreement_time)]
+     * id(cm_co_terms_and_conditions):                              ID in the database of the Terms and Conditions entry
+     * description(cm_co_terms_and_conditions):                     Short description of the T&C entry
+     * modified(cm_co_terms_and_conditions):                        The date of latest update
+     * cou_id(cm_co_terms_and_conditions):                          null if not related to a COU an integer of the COU id otherwise
+     * url(cm_co_terms_and_conditions):                             the url of the Terms&Condition document
+     * revision(cm_co_terms_and_conditions):                        Indicates the number of times this T&C was revised
+     * last_aggrement_aupid_and_time(cm_co_t_and_c_agreements):     co_terms_and_conditions_id::agreement_time pair of the last accepted T&C and the exact date of acceptance
+     *
+     * @param integer $personId
+     *
+     * @return array
+     * @throws Exception
+     *
+     */
+    private function getTermsAgreementRevisioned($personId)
+    {
+        SimpleSAML_Logger::debug("[attrauthcomanage] getTermsAgreementRevisioned: personId="
             . var_export($personId, true));
 
         $result = array();
         $db = SimpleSAML\Database::getInstance();
         $queryParams = array(
             'coPersonId' => array($personId, PDO::PARAM_INT),
-            'coTermsId' => array($coTermsId, PDO::PARAM_INT),
         );
-        $stmt = $db->read($this->termsAgreementQuery, $queryParams);
+        $stmt = $db->read($this->termsAgreementRevisionedQuery, $queryParams);
         if ($stmt->execute()) {
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $result[] = $row;
             }
-            SimpleSAML_Logger::debug("[attrauthcomanage] getTermsAgreement: result="
+            SimpleSAML_Logger::debug("[attrauthcomanage] getTermsAgreementRevisioned: result="
                 . var_export($result, true));
             return $result;
         } else {
@@ -1378,12 +1609,12 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                     if (!array_key_exists($req_attr, $config)) {
                         SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: '" . $req_attr . "' not specified");
                         $this->showError(
-                            "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_NOT_SPECIFIED",  ['%REQATTR%' => $req_attr]);
+                               "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_NOT_SPECIFIED", ['%REQATTR%' => $req_attr]);
                     }
                     if (!$validation_rules['type']($config[$req_attr])) {
                         SimpleSAML_Logger::error("[attrauthcomanage] Configuration error: '" . $req_attr . "' wrong format(array required)");
                         $this->showError(
-                            "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_WRONG_FORMAT", ['%REQATTR%' => $req_attr]);
+                              "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_WRONG_FORMAT", ['%REQATTR%' => $req_attr]);
                     }
                     if(array_key_exists('key_list', $validation_rules)) {
                         $required_key_values = array_values($validation_rules['key_list']);
@@ -1398,7 +1629,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                             SimpleSAML_Logger::error("[attrauthcomanage] Configuration error:'" . $req_attr
                                                      . "' key configuration errorRequired keys missing:"
                                                      . implode(',', $non_provided_keys));
-                            $this->showError("attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_KEY_CONFIGURATION_ERROR", ['%REQATTR%' => $req_attr, '%NONKEYS%' => implode(',', $non_provided_keys)]);
+                            $this->showError(
+                                "attrauthcomanage:attrauthcomanage:exception_ATTRIBUTE_KEY_CONFIGURATION_ERROR", ['%REQATTR%' => $req_attr, '%NONKEYS%' => implode(',', $non_provided_keys)]);
                         }
 
                     }
@@ -1481,8 +1713,9 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                 'userIdAttribute' => 'is_string',
                 'urnLegacy' => 'is_bool',
                 'certificate' => 'is_bool',
+                'retrieveSshKeys' => 'is_bool',
                 'mergeEntitlements' => 'is_bool',
-                'coTermsId' => 'is_int',
+                'retrieveAUP' => 'is_bool',
             ),
         );
     }
