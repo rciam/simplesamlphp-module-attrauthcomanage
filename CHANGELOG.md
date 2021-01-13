@@ -4,12 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unrealesed]
+## [v1.5.4] - 2021-01-13
 
 ### Added
 - User's Terms and Conditions/Acceptable Use Policy (AUP) information in state information
 - User's COPerson ID in state information
-- Add support for retrieving information about user's SSH keys
+- Support for retrieving user's SSH keys
 
 ## [v1.5.3] - 2020-12-04
 
