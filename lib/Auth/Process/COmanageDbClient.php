@@ -1161,6 +1161,16 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData: Group Memberships.");
         // XXX Get all the memberships from the the CO for the user
         $this->coGroupMemberships = $this->getMemberships($this->coId, $basicInfo['id']);
+
+        // XXX Terms Agreement
+        // XXX We rely on memberships for COUs AUPs. Even when we have no memberships we need to construct AUP and then return
+        if ($this->retrieveAUP) {
+            $termsAgreementRevised = $this->getTermsAgreementRevisioned($basicInfo['id']);
+            $termsAgreementValid = $this->getTermsAgreementValid($basicInfo['id']);
+            // Construct the AUP model and append it into the state, $state['aup']
+            $this->constructAupStatus($termsAgreementValid, $termsAgreementRevised, $this->coGroupMemberships, $state);
+        }
+
         // XXX if this is empty return
         if (empty($this->coGroupMemberships)) {
             if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
@@ -1298,14 +1308,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
 
         if (!empty($state['Attributes']['eduPersonEntitlement'])) {
             SimpleSAML_Logger::debug("[attrauthcomanage] retrieveCOPersonData AFTER: eduPersonEntitlement=" . var_export($state['Attributes']['eduPersonEntitlement'], true));
-        }
-
-        // XXX Terms Agreement
-        if ($this->retrieveAUP) {
-            $termsAgreementRevised = $this->getTermsAgreementRevisioned($basicInfo['id']);
-            $termsAgreementValid = $this->getTermsAgreementValid($basicInfo['id']);
-            // Construct the AUP model and append it into the state, $state['aup']
-            $this->constructAupStatus($termsAgreementValid, $termsAgreementRevised, $this->coGroupMemberships, $state);
         }
     }
 
