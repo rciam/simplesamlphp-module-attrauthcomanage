@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Fixed
+
+- Fix agreed aup revision with null value evalueated falsely
+
+## [v1.5.6] - 2021-01-15
+
+### Fixed
+
+- Fix agreed aup revision with null value evalueated falsely
+- Minor code style changes
+
 ## [v1.5.5] - 2021-01-14
 
 ### Fixed
