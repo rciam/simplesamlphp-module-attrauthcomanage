@@ -264,7 +264,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         . " where co_terms_and_conditions_id = cctac.id"
         . " and co_person_id = :coPersonId"
         . " order by agreement_time desc"
-        . " limit 1) as agreement_id_last_agreement_aupid_time"
+        . " limit 1) as agreement_id_last_agreement_aupid_time,"
+        . " cctac.revision as last_aggrement_aupid_revision"
         . " from cm_co_terms_and_conditions as cctac"
         . " inner join cm_co_people ccp on cctac.co_id = ccp.co_id and"
         . " not ccp.deleted and"
@@ -1404,8 +1405,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             $tmp['agreed'] = null;
             if (!empty($aup['agreement_id_last_agreement_aupid_time'])) {
                 list($tmp['agreed']['id'], $tmp['agreed']['aupId'], $tmp['agreed']['date']) = explode('::', $aup['agreement_id_last_agreement_aupid_time']);
-                $tmp['agreed']['version'] = !empty($aup['last_aggrement_aupid_revision'])
-                                            ? $aup['last_aggrement_aupid_revision'] : $aup['revision'];
+                $tmp['agreed']['version'] = !is_null($aup['last_aggrement_aupid_revision'])
+                                            ? $aup['last_aggrement_aupid_revision'] : 0;
             }
             $state['rciamAttributes']['aup'][] = $tmp;
         }
