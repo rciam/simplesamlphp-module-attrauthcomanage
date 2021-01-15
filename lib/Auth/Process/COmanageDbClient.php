@@ -63,7 +63,6 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $blacklist = array();
 
     private $coId;
-    private $retrieveAUP = false;
     private $coUserIdType = 'epuid';
     private $coOrgIdType = array('epuid');
 
@@ -77,6 +76,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
     private $urnAuthority = null;
     private $certificate = false;
     private $retrieveSshKeys = false;
+    private $retrieveAUP = false;
     private $registryUrls = array();
     private $communityIdps = array();
     private $mergeEntitlements = false;
@@ -250,7 +250,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         . " where co_terms_and_conditions_id = cctac.id"
         . " and co_person_id = :coPersonId"
         . " order by agreement_time desc"
-        . " limit 1) as agreement_id_last_agreement_aupid_time"
+        . " limit 1) as agreement_id_last_agreement_aupid_time,"
+        . " cctac.revision as last_aggrement_aupid_revision"
         . " from cm_co_terms_and_conditions as cctac"
         . " inner join cm_co_people ccp on cctac.co_id = ccp.co_id and"
         . " not ccp.deleted and"
@@ -474,7 +475,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
      *
      * @return bool
      */
-    private function isIdpIdentLogin($idpIdent, $identsList) {
+    private function isIdpIdentLogin($idpIdent, $identsList)
+    {
         if( empty($identsList) || empty($idpIdent)) {
             return false;
         }
@@ -500,7 +502,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
      * @throws Exception
      * @todo make timezone configuration
      */
-    private function isIdpIdentExpired($idpIdent, $identsList) {
+    private function isIdpIdentExpired($idpIdent, $identsList)
+    {
         if( empty($identsList) || empty($idpIdent)) {
             return null;
         }
@@ -1347,6 +1350,7 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
      *       }
      *     ]
      *   }
+     *
      * @param array $accepted_aup
      * @param array $pending_aup
      * @param array $co_memberships
@@ -1397,8 +1401,8 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             $tmp['agreed'] = null;
             if (!empty($aup['agreement_id_last_agreement_aupid_time'])) {
                 list($tmp['agreed']['id'], $tmp['agreed']['aupId'], $tmp['agreed']['date']) = explode('::', $aup['agreement_id_last_agreement_aupid_time']);
-                $tmp['agreed']['version'] = !empty($aup['last_aggrement_aupid_revision'])
-                                            ? $aup['last_aggrement_aupid_revision'] : $aup['revision'];
+                $tmp['agreed']['version'] = !is_null($aup['last_aggrement_aupid_revision'])
+                                            ? $aup['last_aggrement_aupid_revision'] : 0;
             }
             $state['rciamAttributes']['aup'][] = $tmp;
         }
