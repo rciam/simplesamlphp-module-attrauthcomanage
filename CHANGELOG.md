@@ -4,11 +4,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v2.0.2] - 2021-01-25
 
-### Fixed
+### Added
 
-- Fix agreed aup revision with null value evalueated falsely
+- Encoding of nested COUs in entitlements according to [AARC-G002](https://aarc-community.org/guidelines/aarc-g002)
+- `voGroupPrefix` configuration option to support multitenacy
+- `voPersonVerifiedEmail` attribute for releasing verified email address(es)
+- Support for querying terms & conditions agreement information
+- Configuration for enabling the retrieval of certificate information
+- Option to skip `voWhitelist` checks, if `voWhitelist` is `null`
+- `attrMap` configuration option. Map COmanage Registry `IdentifierEnum` class values to SimpleSAMLphp attibute names
+- User's COPerson ID in state information
+- Support for retrieving user's SSH keys
+- Dictionary for error messages
+- `coOrgIdType` configuration option. List of Identifier types associated with user's Organizational Identities
+
+### Changed
+
+- Improve calculation of COPerson's profile attributes
+- Improve handling of suspended users
+- Calculation of user's Profile Identifier. A valid Identifier must be an authenticator and must not be expired
 
 ## [v1.5.6] - 2021-01-15
 
@@ -88,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added `voPersonVerifiedEmail` attribute 
+- Added `voPersonVerifiedEmail` attribute
 
 ### Changed
 
@@ -147,7 +163,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- This version is compatible with [SimpleSAMLphp v1.17](https://simplesamlphp.org/docs/1.17/simplesamlphp-changelog) 
+- This version is compatible with [SimpleSAMLphp v1.17](https://simplesamlphp.org/docs/1.17/simplesamlphp-changelog)
 
 ## [v1.2.1] - 2020-02-14
 
