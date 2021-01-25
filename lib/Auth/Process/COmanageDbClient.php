@@ -1739,7 +1739,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
     private function showError($e, $parameters = NULL)
     {
         $globalConfig = Configuration::getInstance();
-        $t = new SimpleSAML_XHTML_Template($globalConfig, 'attrauthcomanage:exception.tpl.php');
+        $t = new Template($globalConfig, 'attrauthcomanage:exception.tpl.php');
         $t->data['e'] = $e;
         $t->data['parameters'] = (!empty($parameters) ? $parameters : "");
         $t->show();
