@@ -297,7 +297,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
 
         // Get a copy of the default Roles before enriching with COmanage roles
         // TODO: Move this out configuration check. Make this as part of voRoles multitenacy support
-        $voRolesObject = new ArrayObject($config['voRoles']);
+        $voRolesObject = new \ArrayObject($config['voRoles']);
         $this->voRolesDef = $voRolesObject->getArrayCopy();
     }
 
@@ -517,18 +517,18 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 if( $ident['identifier'] === $idpIdent) {
                     Logger::debug("[attrauthcomanage] isIdpIdentExpired: org_valid_through = " . var_export($ident['org_valid_through'], true));
                     Logger::debug("[attrauthcomanage] isIdpIdentExpired: org_valid_from = " . var_export($ident['org_valid_from'], true));
-                    $current_date = new DateTime('now', new DateTimeZone('Etc/UTC'));
+                    $current_date = new \DateTime('now', new \DateTimeZone('Etc/UTC'));
                     if (empty($ident['org_valid_from']) && empty($ident['org_valid_through'])) {
                         return false;
                     } elseif (empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
-                        $valid_through = new DateTime($ident['org_valid_through'], new DateTimeZone('Etc/UTC'));
+                        $valid_through = new \DateTime($ident['org_valid_through'], new \DateTimeZone('Etc/UTC'));
                         return !($valid_through >= $current_date);
                     } elseif (!empty($ident['org_valid_from']) && empty($ident['org_valid_through'])) {
-                        $valid_from = new DateTime($ident['org_valid_from'], new DateTimeZone('Etc/UTC'));
+                        $valid_from = new \DateTime($ident['org_valid_from'], new \DateTimeZone('Etc/UTC'));
                         return !($current_date >= $valid_from);
                     } elseif (!empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
-                        $valid_from = new DateTime($ident['org_valid_from'], new DateTimeZone('Etc/UTC'));
-                        $valid_through = new DateTime($ident['org_valid_through'], new DateTimeZone('Etc/UTC'));
+                        $valid_from = new \DateTime($ident['org_valid_from'], new \DateTimeZone('Etc/UTC'));
+                        $valid_through = new \DateTime($ident['org_valid_through'], new \DateTimeZone('Etc/UTC'));
                         if ($valid_through >= $current_date
                             && $current_date > $valid_from) {
                             return false;
@@ -1158,7 +1158,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         // Get SSH Public Key information
         if($this->retrieveSshKeys) {
             Logger::debug("[attrauthcomanage] retrieveCOPersonData: sshPublicKeys.");
-            $attrSshPublicKey = new SshPublicKey();
+            $attrSshPublicKey = new Attributes\SshPublicKey();
             $sshPublicKeys = $attrSshPublicKey->getSshPublicKeys($basicInfo['id']);
             foreach($sshPublicKeys as $sshKey) {
                 if(!empty($sshKey['skey']) && !empty($sshKey['type'])) {
@@ -1578,7 +1578,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             . var_export($personId, true));
 
         $result = [];
-        $db = SimpleSAML\Database::getInstance();
+        $db = Database::getInstance();
         $queryParams = [
             'coPersonId' => [$personId, PDO::PARAM_INT],
         ];

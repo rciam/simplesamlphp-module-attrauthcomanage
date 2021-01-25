@@ -11,6 +11,7 @@
 namespace SimpleSAML\Module\attrauthcomanage\Attributes;
 
 use PDO;
+use SimpleSAML\Database;
 use SimpleSAML\Error;
 use SimpleSAML\Logger;
 
