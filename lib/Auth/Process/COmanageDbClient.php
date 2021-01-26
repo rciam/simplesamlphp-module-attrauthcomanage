@@ -38,10 +38,11 @@
  *            'certificate' => false,
  *            'retrieveSshKeys' => true,
  *            'registryUrls' => [
- *               'self_sign_up'      => 'https://example.com/registry/co_petitions/start/coef:1',
- *               'sign_up'           => 'https://example.com/registry/co_petitions/start/coef:2',
- *               'community_sign_up' => 'https://example.com/registry/co_petitions/start/coef:3',
- *               'registry_login'    => 'https://example.com/registry/co_petitions/auth/login',
+ *               'self_sign_up'             => 'https://example.com/registry/co_petitions/start/coef:1',
+ *               'sign_up'                  => 'https://example.com/registry/co_petitions/start/coef:2',
+ *               'community_sign_up'        => 'https://example.com/registry/co_petitions/start/coef:3',
+ *               'community_sign_up_no_aff' => 'https://example.com/registry/co_petitions/start/coef:4',
+ *               'registry_login'           => 'https://example.com/registry/co_petitions/auth/login',
  *            ],
  *            // Currently only Indentifier attributes are supported, like
  *            'attrMap' => [
@@ -338,8 +339,18 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                   $callback = Module::getModuleURL('attrauthcomanage/idp_callback.php', ['stateId' => $id]);
                   Logger::debug("[attrauthcomanage] process: callback url => " . $callback);
                   $params = ["targetnew" => $callback];
+                  // Check if community signup is required
                   if (!empty($state['saml:AuthenticatingAuthority']) && in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)) {
-                    HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
+                      // Redirect to community signup flow with all
+                      // attributes available including affiliation
+                      if (!empty($state['Attributes']['voPersonExternalAffiliation'])
+                          && !empty($state['Attributes']['mail'])
+                          && !empty($state['Attributes']['givenName'])
+                          && !empty($state['Attributes']['sn'])) {
+                          HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
+                      } elseif (!empty($this->registryUrls['community_sign_up_no_aff'])) {
+                          HTTP::redirectTrustedURL($this->registryUrls['community_sign_up_no_aff'], $params);
+                      }
                   }
                   $this->_redirect($basicInfo, $state, $params);
             }
