@@ -1,0 +1,42 @@
+.info, .success, .warning, .error, .validation {
+    border: 1px solid;
+    margin: 10px 0px;
+    padding:15px 10px 15px 50px;
+    background-repeat: no-repeat;
+    background-position: 10px center;
+}
+/* CSS Style for notification boxes*/
+.info {
+    color: #00529B;
+    background-color: #BDE5F8;
+    background-image: url('../../resources/icons/info.png');
+}
+.success {
+    color: #4F8A10;
+    background-color: #DFF2BF;
+    background-image:url('../../resources/icons/success.png');
+}
+.warning {
+    color: #9F6000;
+    background-color: #FEEFB3;
+    background-image: url('../../resources/icons/warning.png');
+}
+.error {
+    color: #D8000C;
+    background-color: #FFBABA;
+    background-image: url('../../resources/icons/error.png');
+}
+.invite-expire {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5em;
+    flex-wrap: wrap;
+}
+.service-privacy-policy {
+    margin-top: 1em;
+}
+.noty-description {
+    line-height: 2em;
+    overflow-wrap: anywhere;
+}

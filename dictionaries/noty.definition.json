@@ -1,0 +1,20 @@
+{
+  "yes": {
+    "en": "Continue"
+  },
+  "no": {
+    "en": "Abort"
+  },
+  "title": {
+    "en": "<p>We are sorry for the inconvienience but we COULD NOT proceed with your Authentication</p><br/>"
+  },
+  "msg_title": {
+    "en": "<b>This is your current status:</b>"
+  },
+  "default_status": {
+    "en": "Action Required"
+  },
+  "account_pending_confirmation": {
+    "en": "Account in Pending Email Confirmation Status"
+  }
+}

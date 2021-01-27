@@ -312,21 +312,49 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             if (!empty($basicInfo)) {
                 $state['basicInfo'] = $basicInfo;
             }
-            if (empty($basicInfo['id']) || empty($basicInfo['status']) || ($basicInfo['status'] !== 'A' && $basicInfo['status'] !== 'GP')) {
-                  if ($basicInfo['status'] === 'S') {
-                      $this->showError('attrauthcomanage:attrauthcomanage:exception_SUSPENDED_USER');
+            if (empty($basicInfo['id'])                                                                                 // User is NOT present in the Registry OR
+                || empty($basicInfo['status'])                                                                          // User has no status in the Registry OR
+                || ($basicInfo['status']    !== sspmod_attrauthcomanage_Enums_StatusEnum::Active                        // (User is NOT ACTIVE in the Registry AND
+                    && $basicInfo['status'] !== sspmod_attrauthcomanage_Enums_StatusEnum::GracePeriod)) {               // User is NOT in GRACE PERIOD in the Registry)
+                // XXX User is Suspended
+                if ($basicInfo['status'] === sspmod_attrauthcomanage_Enums_StatusEnum::Suspended) {                     // User is SUSPENDED
+                  $this->showError('attrauthcomanage:attrauthcomanage:exception_SUSPENDED_USER');
+                }
+                // XXX Petition in Pending Confirmation
+                if ($basicInfo['status'] === sspmod_attrauthcomanage_Enums_StatusEnum::PendingConfirmation) {           // User is PENDING CONFIRMATION
+                  // Get Petition Id
+                  $petition_cfg = array(
+                      'enrollee_co_person_id'   => (int)$basicInfo['id'],
+                      'petition_status'         => $basicInfo['status'],
+                      'orgIdentifier'           => $state['Attributes'][$this->userIdAttribute][0],
+                  );
+                  $pt_hdler = new sspmod_attrauthcomanage_Enrollment_PetitionHandler($petition_cfg);
+                  $petition = $pt_hdler->getPetitionFromPersonIdPetStatus();
+                  if(!empty($petition)) {
+                      // Get petition id and redirect to email view
+                      $pt_noty = array(
+                          'level' => $pt_hdler->getBannerClass(),
+                          'description' => $pt_hdler->getInfoHtmlElement(),
+                          'status' => 'account_pending_confirmation', // This is a dictionary key
+                          'ok_btn_label' => 'Send Confirmation Mail',
+                          'send_endpoint' => sspmod_attrauthcomanage_Enums_EndpointCmgEnum::ConfirmationEmailResend,
+                      );
+                      $this->showNoty($pt_noty, $state);
                   }
-                  $state['UserID'] = $orgId;
-                  $state['ReturnProc'] = array(get_class($this), 'retrieveCOPersonData');
-                  $params = array();
-                  $id = SimpleSAML_Auth_State::saveState($state, 'attrauthcomanage:register');
-                  $callback = SimpleSAML_Module::getModuleURL('attrauthcomanage/idp_callback.php', array('stateId' => $id));
-                  SimpleSAML_Logger::debug("[attrauthcomanage] process: callback url => " . $callback);
-                  $params = array("targetnew" => $callback);
-                  if (!empty($state['saml:AuthenticatingAuthority']) && in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)) {
-                    \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
-                  }
-                  $this->_redirect($basicInfo, $state, $params);
+                }
+
+                // XXX User is eligible to proceed to service
+                $state['UserID'] = $orgId;
+                $state['ReturnProc'] = array(get_class($this), 'retrieveCOPersonData');
+                $params = array();
+                $id = SimpleSAML_Auth_State::saveState($state, 'attrauthcomanage:register');
+                $callback = SimpleSAML_Module::getModuleURL('attrauthcomanage/idp_callback.php', array('stateId' => $id));
+                SimpleSAML_Logger::debug("[attrauthcomanage] process: callback url => " . $callback);
+                $params = array("targetnew" => $callback);
+                if (!empty($state['saml:AuthenticatingAuthority']) && in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)) {
+                \SimpleSAML\Utils\HTTP::redirectTrustedURL($this->registryUrls['community_sign_up'], $params);
+                }
+                $this->_redirect($basicInfo, $state, $params);
             }
             // Get all the data from the COPerson and import them in the state
             $this->retrieveCOPersonData($state);
@@ -1146,10 +1174,11 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
             $attrSshPublicKey = new sspmod_attrauthcomanage_Attributes_SshPublicKey();
             $sshPublicKeys = $attrSshPublicKey->getSshPublicKeys($basicInfo['id']);
             foreach($sshPublicKeys as $sshKey) {
-                if(!empty($sshKey['skey']) && !empty($sshKey['type'])) {
-                    $sshPublicKey = $attrSshPublicKey->getSshPublicKeyType($sshKey['type']) . ' ' . $sshKey['skey']
-                    . ( !empty($sshKey['comment']) ? ' ' . $sshKey['comment'] : '' );
-                    if(!array_key_exists('sshPublicKey', $state['Attributes'])) {
+                $sshPublicKey = $attrSshPublicKey->formatSshKey($sshKey);
+                // XXX Add to the state
+                // todo: Add to the RCIAM state?
+                if(!empty($sshPublicKey)) {
+                   if(!array_key_exists('sshPublicKey', $state['Attributes'])) {
                         $state['Attributes']['sshPublicKey'] = array();
                     }
                     if(!in_array($sshPublicKey, $state['Attributes']['sshPublicKey'], true)) {
@@ -1383,9 +1412,24 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
                         }
                     }
                 );
-                if (isset($cou) && is_array($cou)) {
+                if (!empty($cou)) {
+                    // XXX User is COU member
                     $cou = array_values($cou);
                     $tmp['vo']['name'] = $cou[0]['group_name'];
+                } else {
+                    // XXX User is ONLY COU:admins member
+                    $group = array_filter(
+                        $co_memberships,
+                        static function($group) use ($cou_id) {
+                            if ((int)$group['cou_id'] === (int)$cou_id
+                                && strpos($group['group_name'], ':admins') !== false) {
+                                return $group;
+                            }
+                        }
+                    );
+                    $group = array_values($group);
+                    $group_name = explode(':admins', $group[0]['group_name'])[0];
+                    $tmp['vo']['name'] = $group_name;
                 }
             }
             $tmp['agreed'] = null;
@@ -1730,6 +1774,24 @@ class sspmod_attrauthcomanage_Auth_Process_COmanageDbClient extends SimpleSAML_A
         $t->data['parameters'] = (!empty($parameters) ? $parameters : "");
         $t->show();
         exit();
+    }
+
+    /**
+     * @param string[]  $args
+     * @param []        $state
+     *
+     * @example         $pt_noty = array(
+     *                    'level' => $pt_hdler->getBannerClass(),
+     *                    'description' => $pt_hdler->getInfoHtmlElement(),
+     *                    'status' => 'account_pending_confirmation', // This is a dictionary key
+     *                  );
+     */
+    private function showNoty($args, $state)
+    {
+        $state['noty'] = $args;
+        $id = SimpleSAML_Auth_State::saveState($state, 'attrauthcomanage_noty_state');
+        $url = SimpleSAML_Module::getModuleURL('attrauthcomanage/noty.ctrl.php');
+        \SimpleSAML\Utils\HTTP::redirectTrustedURL($url, array('StateId' => $id));
     }
 
 }
