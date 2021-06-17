@@ -14,20 +14,10 @@ use PDO;
 use SimpleSAML\Database;
 use SimpleSAML\Error;
 use SimpleSAML\Logger;
+use SimpleSAML\Module\attrauthcomanage\Enums\SshKeyTypeEnum as SshKeyTypeEnum;
 
-class SshPublicKey
+class SshPublicKey implements SshKeyTypeEnum
 {
-
-    public static $SSH_PUBLIC_KEY_TYPE = [
-        'DSA' => 'ssh-dss',
-        'ECDSA' => 'ecdsa-sha2-nistp256',
-        'ECDSA384' => 'ecdsa-sha2-nistp384',
-        'ECDSA521' => 'ecdsa-sha2-nistp521',
-        'ED25519' => 'ssh-ed25519',
-        'RSA' => 'ssh-rsa',
-        'RSA1' => 'ssh-rsa1',
-    ];
-
     /**
      * Query the SSH table and fetch all SSH keys related to the CO Person
      *
@@ -80,9 +70,9 @@ class SshPublicKey
         return $result;
     }
 
-    // todo: This is redundant. Remove it
+    // Return SSH Public Key Type
     public static function getSshPublicKeyType($key)
     {
-        return self::$SSH_PUBLIC_KEY_TYPE[$key];
+        return constant("self::" . $key);
     }
 }
