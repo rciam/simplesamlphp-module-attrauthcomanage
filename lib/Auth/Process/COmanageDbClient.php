@@ -809,7 +809,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             . " AND cous.cou_id IS NULL"
             . " LEFT OUTER JOIN cm_co_person_roles AS ROLE ON cous.id = role.cou_id"
             . " AND role.co_person_role_id IS NULL"
-            . " AND role.status = 'A'"
+            . " AND role.status IN ('A', 'GP')"
             . " AND NOT role.deleted AND role.co_person_id = members.co_person_id"
             . " GROUP BY"
             . " groups.name";

@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Support for resend confirmation email by the user during login
 
+#### Changed
+
+- Construct VO membership entitlements if the user is active or in grace period
+
 ## [v2.0.5] - 2021-04-08
 
 ### Added
