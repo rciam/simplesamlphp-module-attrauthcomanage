@@ -63,6 +63,9 @@ The following authproc filter configuration options are supported:
     * `voRoles`: An array of default roles to be used for the composition of the entitlements.
     * `urnAuthority`: A string to use as the authority of the generated `eduPersonEntitlement` URN values containing group membership and role information.
     * `registryUrls`: An array of COmanage endpoints representing standard Enrollment Flow types. All the four endpoints are mandatory.
+    * `comanage_api_username`: COmanage REST API username.
+    * `comanage_api_password`: COmanage REST API password.
+
  * Optional:
     * `voGroupPrefix`: An array of group prefixes per (CO)mmunity to be used for the composition of the entitlements. Defaults to `urlencode($co_name) . ":group"`.
     * `coUserIdType`: A string that indicates the type of the identifier that the users have. Defaults to `epuid`.
@@ -110,6 +113,8 @@ Note: In case you need to change the format of the entitlements you need to modi
             'urnNamespace' => 'urn:mace:example.org',
             'urnAuthority' => 'example.eu',
             'mergeEntitlements' => false,
+            'comanage_api_username' => 'rciam',
+            'comanage_api_password' => 'password',
             'certificate' => false,
             'retrieveSshKeys' => true,
             'registryUrls' => [

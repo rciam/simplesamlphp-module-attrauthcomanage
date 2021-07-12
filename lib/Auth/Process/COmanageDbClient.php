@@ -71,6 +71,9 @@ use SimpleSAML\XHTML\Template;
 use SimpleSAML\Utils\HTTP;
 use SimpleSAML\Database;
 use SimpleSAML\Module\attrauthcomanage\Attributes;
+use SimpleSAML\Module\attrauthcomanage\Enrollment;
+use SimpleSAML\Module\attrauthcomanage\Enums\StatusEnum as StatusEnum;
+use SimpleSAML\Module\attrauthcomanage\Enums\EndpointCmgEnum as EndpointCmgEnum;
 
 class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
 {
@@ -102,6 +105,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
     private $voRoles = [];
     private $voRolesDef = [];
     private $coGroupMemberships = [];
+    private $comanage_api_username = null;
+    private $comanage_api_password = null;
 
     private $basicInfoQuery = 'select'
         . ' person.id,'
@@ -328,10 +333,53 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             if (!empty($basicInfo)) {
                 $state['basicInfo'] = $basicInfo;
             }
-            if (empty($basicInfo['id']) || empty($basicInfo['status']) || ($basicInfo['status'] !== 'A' && $basicInfo['status'] !== 'GP')) {
-                if ($basicInfo['status'] === 'S') {
+
+
+
+            if (empty($basicInfo['id'])                                                   // User is NOT present in the Registry OR
+                || empty($basicInfo['status'])                                            // User has no status in the Registry OR
+                || ($basicInfo['status']    !== StatusEnum::Active                        // (User is NOT ACTIVE in the Registry AND
+                    && $basicInfo['status'] !== StatusEnum::GracePeriod)) {               // User is NOT in GRACE PERIOD in the Registry)
+                // XXX User is Suspended
+                if ($basicInfo['status'] === StatusEnum::Suspended) {                     // User is SUSPENDED
                     $this->showError('attrauthcomanage:attrauthcomanage:exception_SUSPENDED_USER');
                 }
+                // XXX Petition in Pending Confirmation
+                if ($basicInfo['status'] === StatusEnum::PendingConfirmation) {           // User is PENDING CONFIRMATION
+                    // Get Petition Id
+                    $petition_cfg = [
+                        'enrollee_co_person_id'   => (int)$basicInfo['id'],
+                        'petition_status'         => $basicInfo['status'],
+                        'orgIdentifier'           => $state['Attributes'][$this->userIdAttribute][0],
+                        'co_id'                   => $this->coId,
+                    ];
+                    $petition_handler = new Enrollment\PetitionHandler($petition_cfg);
+                    $petition = $petition_handler->getPetitionFromPersonIdPetStatus();
+                    $endpoint = str_replace('%id%',
+                                            $petition[0]['petition_id'],
+                                            EndpointCmgEnum::ConfirmationEmailResend);
+                    $state['rciamAttributes']['comanage_api_user'] = [
+                      'username' => $this->comanage_api_username,
+                      'password' => $this->comanage_api_password,
+                    ];
+                    if(!empty($petition)) {
+                        // Get petition id and redirect to email view
+                        $pt_noty = [
+                            'level' => $petition_handler->getBannerClass(),
+                            'description' => $petition_handler->getUserNotify(),
+                            //'status' => 'account_pending_confirmation', // This is a dictionary key
+                            'icon' => 'email.gif',
+                            'yes_btn_show' => true,
+                            'form_fields' => [
+                                'send_endpoint' => $endpoint,
+                                'mail' => $petition[0]['mail'],
+                            ],
+                        ];
+                        $this->showNoty($pt_noty, $state);
+                    }
+                }
+
+                // XXX User is eligible to proceed to service
                 $state['UserID'] = $orgId;
                 $state['ReturnProc'] = [get_class($this), 'retrieveCOPersonData'];
                 $params = [];
@@ -761,7 +809,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             . " AND cous.cou_id IS NULL"
             . " LEFT OUTER JOIN cm_co_person_roles AS ROLE ON cous.id = role.cou_id"
             . " AND role.co_person_role_id IS NULL"
-            . " AND role.status = 'A'"
+            . " AND role.status IN ('A', 'GP')"
             . " AND NOT role.deleted AND role.co_person_id = members.co_person_id"
             . " GROUP BY"
             . " groups.name";
@@ -1131,7 +1179,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         // XXX Check if the identifier is an authenticator
         if (!$this->isIdpIdentLogin($orgId, $orgIdentifiers)) {
             // Normally, this should not happen
-            $err_msg = 'The identifier <b>- ' . $orgId . ' -</b><br>is not present in your EGI account or is not a valid authenticator.<br>Please contact support for further assistance.';
+            $err_msg = 'The identifier <b>- ' . $orgId . ' -</b><br>is not present in your account or is not a valid authenticator.<br>Please contact support for further assistance.';
             throw new Exception($err_msg);
         }
         // XXX Check if the identifier is valid or has expired
@@ -1418,9 +1466,24 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                         }
                     }
                 );
-                if (isset($cou) && is_array($cou)) {
+                if (!empty($cou)) {
+                    // XXX User is COU member
                     $cou = array_values($cou);
                     $tmp['vo']['name'] = $cou[0]['group_name'];
+                } else {
+                    // XXX User is ONLY COU:admins member
+                    $group = array_filter(
+                        $co_memberships,
+                        static function($group) use ($cou_id) {
+                            if ((int)$group['cou_id'] === (int)$cou_id
+                                && strpos($group['group_name'], ':admins') !== false) {
+                                return $group;
+                            }
+                        }
+                    );
+                    $group = array_values($group);
+                    $group_name = explode(':admins', $group[0]['group_name'])[0];
+                    $tmp['vo']['name'] = $group_name;
                 }
             }
             $tmp['agreed'] = null;
@@ -1747,6 +1810,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 'coTermsId' => 'is_int',
                 'retrieveAUP' => 'is_bool',
                 'retrieveSshKeys' => 'is_bool',
+                'comanage_api_username' => 'is_string',
+                'comanage_api_password' => 'is_string',
             ],
         ];
     }
@@ -1765,6 +1830,24 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         $t->data['parameters'] = (!empty($parameters) ? $parameters : "");
         $t->show();
         exit();
+    }
+
+    /**
+     * @param string[]  $args
+     * @param []        $state
+     *
+     * @example         $pt_noty = [
+     *                    'level' => $pt_hdler->getBannerClass(),
+     *                    'description' => $pt_hdler->getInfoHtmlElement(),
+     *                    'status' => 'account_pending_confirmation', // This is a dictionary key
+     *                  ];
+     */
+    private function showNoty($args, $state)
+    {
+        $state['noty'] = $args;
+        $id = State::saveState($state, 'attrauthcomanage_noty_state');
+        $url = Module::getModuleURL('attrauthcomanage/noty.ctrl.php');
+        HTTP::redirectTrustedURL($url, ['StateId' => $id]);
     }
 
 }

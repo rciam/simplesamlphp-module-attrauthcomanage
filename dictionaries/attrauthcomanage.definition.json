@@ -31,5 +31,8 @@
     },
     "exception_description": {
         "en": "An unexpected error occurred while retrieving attributes from an external attribute authority. The exception was:"
+    },
+    "privacy_policy": {
+        "en": "Privacy Policy for the Service"
     }
 }
