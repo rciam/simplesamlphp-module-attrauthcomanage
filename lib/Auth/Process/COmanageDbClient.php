@@ -1259,9 +1259,6 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         }
         // XXX if this is empty return
         if (empty($this->coGroupMemberships)) {
-            if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
-                $state['Attributes']['eduPersonEntitlement'] = [];
-            }
             return;
         }
         // XXX Extract the group memberships
