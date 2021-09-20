@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Do not include empty `edupersonEntitlements` field in state
+- Skip merge of `edupersonEntitlements` when the user has no memberships
 
 ## [v2.1.0] - 2021-07-12
 

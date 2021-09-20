@@ -971,7 +971,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         Logger::debug("[attrauthcomanage] mergeEntitlements: orphan_memberships="
             . var_export($orphan_memberships, true));
 
-        if (empty($cou_tree_structure)) {
+        if (empty($cou_tree_structure) || empty($member_entitlements)) {
             return;
         }
 
