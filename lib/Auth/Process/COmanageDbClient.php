@@ -72,6 +72,7 @@ use SimpleSAML\Utils\HTTP;
 use SimpleSAML\Database;
 use SimpleSAML\Module\attrauthcomanage\Attributes;
 use SimpleSAML\Module\attrauthcomanage\Enrollment;
+use SimpleSAML\Module\attrauthcomanage\User;
 use SimpleSAML\Module\attrauthcomanage\Enums\StatusEnum as StatusEnum;
 use SimpleSAML\Module\attrauthcomanage\Enums\EndpointCmgEnum as EndpointCmgEnum;
 
@@ -412,6 +413,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 }
                 $this->_redirect($basicInfo, $state, $params);
             }
+            // Record the login
+            $auth_event = new User\AuthenticationEventHandler();
+            $auth_event->recordAuthenticationEvent($state['Attributes'][$this->userIdAttribute][0]);
             // Get all the data from the COPerson and import them in the state
             $this->retrieveCOPersonData($state);
 
