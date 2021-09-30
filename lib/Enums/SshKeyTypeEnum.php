@@ -3,7 +3,7 @@
 namespace SimpleSAML\Module\attrauthcomanage\Enums;
 
 /**
- * Interface StatusEnum
+ * Interface SshKeyTypeEnum
  *
  * SSH key types abbreviation
  */

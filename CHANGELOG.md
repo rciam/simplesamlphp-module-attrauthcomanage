@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased]
 
+### Added
+
+- Record Authenticiation Event to Registry Database
+
 ### Fixed
 
 - Do not include empty `edupersonEntitlements` field in state
