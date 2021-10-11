@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.2.0] - 2021-10-11
+
+- This version is compatible with [COmanage Registry v3.3-rciam](https://github.com/rciam/comanage-registry/blob/rciam24-3.3.x/CHANGELOG.md)
+
+### Added
+
+- Record Authenticiation Event to Registry Database
+
+### Fixed
+
+- Do not include empty `edupersonEntitlements` field in state
+- Skip merge of `edupersonEntitlements` when the user has no memberships
+
 ## [v2.1.0] - 2021-07-12
 
 ### Added

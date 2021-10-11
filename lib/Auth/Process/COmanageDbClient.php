@@ -72,6 +72,7 @@ use SimpleSAML\Utils\HTTP;
 use SimpleSAML\Database;
 use SimpleSAML\Module\attrauthcomanage\Attributes;
 use SimpleSAML\Module\attrauthcomanage\Enrollment;
+use SimpleSAML\Module\attrauthcomanage\User;
 use SimpleSAML\Module\attrauthcomanage\Enums\StatusEnum as StatusEnum;
 use SimpleSAML\Module\attrauthcomanage\Enums\EndpointCmgEnum as EndpointCmgEnum;
 
@@ -412,6 +413,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 }
                 $this->_redirect($basicInfo, $state, $params);
             }
+            // Record the login
+            $auth_event = new User\AuthenticationEventHandler();
+            $auth_event->recordAuthenticationEvent($state['Attributes'][$this->userIdAttribute][0]);
             // Get all the data from the COPerson and import them in the state
             $this->retrieveCOPersonData($state);
 
@@ -971,7 +975,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         Logger::debug("[attrauthcomanage] mergeEntitlements: orphan_memberships="
             . var_export($orphan_memberships, true));
 
-        if (empty($cou_tree_structure)) {
+        if (empty($cou_tree_structure) || empty($member_entitlements)) {
             return;
         }
 
@@ -1259,9 +1263,6 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         }
         // XXX if this is empty return
         if (empty($this->coGroupMemberships)) {
-            if (!array_key_exists('eduPersonEntitlement', $state['Attributes'])) {
-                $state['Attributes']['eduPersonEntitlement'] = [];
-            }
             return;
         }
         // XXX Extract the group memberships
