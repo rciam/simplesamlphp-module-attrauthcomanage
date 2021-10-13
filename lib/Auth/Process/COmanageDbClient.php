@@ -75,6 +75,7 @@ use SimpleSAML\Module\attrauthcomanage\Enrollment;
 use SimpleSAML\Module\attrauthcomanage\User;
 use SimpleSAML\Module\attrauthcomanage\Enums\StatusEnum as StatusEnum;
 use SimpleSAML\Module\attrauthcomanage\Enums\EndpointCmgEnum as EndpointCmgEnum;
+use SimpleSAML\Module\attrauthcomanage\Enums\OrgIdentityStatusEnum as OrgIdentityStatusEnum;
 
 class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
 {
@@ -155,7 +156,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         . " from cm_org_identities as coi"
         . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id and"
         . " not coi.deleted and not ccoil.deleted and"
-        . " coi.o is not null and coi.o != ''"
+        . " coi.o is not null and coi.o != '' and coi.status != '" . OrgIdentityStatusEnum::Removed . "'"
         . " where ccoil.co_person_id = :coPersonId)"
         . " FROM cm_co_people person"
         . " LEFT OUTER JOIN cm_names name"
