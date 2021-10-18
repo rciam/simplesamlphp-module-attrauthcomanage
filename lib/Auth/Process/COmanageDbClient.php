@@ -204,19 +204,17 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         . ' FROM cm_co_people AS person'
         . ' INNER JOIN cm_co_org_identity_links AS link'
         . ' ON person.id = link.co_person_id'
+        . ' AND not link.deleted AND link.co_org_identity_link_id IS NULL'
+        . ' AND NOT person.deleted AND person.co_person_id IS NULL'
         . ' INNER JOIN cm_org_identities AS org'
         . ' ON link.org_identity_id = org.id'
+        . ' AND org.org_identity_id IS NULL AND NOT org.deleted'
         . ' INNER JOIN cm_certs AS cert'
         . ' ON org.id = cert.org_identity_id'
+        . ' AND cert.cert_id IS NULL AND NOT cert.deleted'
         . ' WHERE person.id = :coPersonId'
-        . ' AND NOT person.deleted'
-        . ' AND person.co_person_id IS NULL'
-        . ' AND NOT link.deleted'
-        . ' AND link.co_org_identity_link_id IS NULL'
-        . ' AND org.org_identity_id IS NULL'
-        . ' AND NOT org.deleted'
-        . ' AND cert.cert_id IS NULL'
-        . ' AND NOT cert.deleted';
+        . ' AND org.status != \'' . OrgIdentityStatusEnum::Removed . '\'';
+
 
     private $termsAgreementRevisionedQuery = "select cctac.id,"
         . " cctac.description,"
@@ -1449,7 +1447,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         }
 
         foreach($all_aups as $aup) {
-            $tmp_aup = [];
+            $tmp = [];
             $tmp['id'] = $aup['id'];
             $tmp['description'] = $aup['description'];
             $tmp['modified'] = $aup['modified'];
