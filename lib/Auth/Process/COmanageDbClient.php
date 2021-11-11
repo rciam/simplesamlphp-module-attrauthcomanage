@@ -418,9 +418,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             $auth_event->recordAuthenticationEvent($state['Attributes'][$this->userIdAttribute][0]);
             // Get all the data from the COPerson and import them in the state
             $this->retrieveCOPersonData($state);
-
-        } catch (\Exception $e) {
-            $this->showError($e);
+        } catch (Error\Exception $e) {
+          $e->show();
         }
     }
 
