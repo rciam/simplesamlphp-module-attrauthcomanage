@@ -1199,6 +1199,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         Logger::debug("[attrauthcomanage] retrieveCOPersonData: loginId=" . var_export($loginId, true));
 
         $state['Attributes'][$this->userIdAttribute] = [$loginId];
+        $state['rciamAttributes']['cuid'] = [$loginId];
         // XXX Create shortcuts for the basic USER data
         $state['UserOrgID'] = $orgId;
         $state['UserID'] = $loginId;
