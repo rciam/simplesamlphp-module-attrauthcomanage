@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `cuid` in state
 
+### Fixed
+
+- `Removed` OrgIdentities should not be allowed to login
+- On failure return friendly error message, not the stack trace
+
 ## [v2.2.0] - 2021-10-11
 
 - This version is compatible with [COmanage Registry v3.3-rciam](https://github.com/rciam/comanage-registry/blob/rciam24-3.3.x/CHANGELOG.md)
