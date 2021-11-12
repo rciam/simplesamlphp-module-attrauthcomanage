@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Removed` OrgIdentities should not be allowed to login
 - On failure return friendly error message, not the stack trace
 
 ## [v2.2.0] - 2021-10-11
