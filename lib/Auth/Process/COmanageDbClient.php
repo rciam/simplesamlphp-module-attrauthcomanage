@@ -75,6 +75,7 @@ use SimpleSAML\Module\attrauthcomanage\Enrollment;
 use SimpleSAML\Module\attrauthcomanage\User;
 use SimpleSAML\Module\attrauthcomanage\Enums\StatusEnum as StatusEnum;
 use SimpleSAML\Module\attrauthcomanage\Enums\EndpointCmgEnum as EndpointCmgEnum;
+use SimpleSAML\Module\attrauthcomanage\Enums\OrgIdentityStatusEnum as OrgIdentityStatusEnum;
 
 class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
 {
@@ -155,7 +156,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         . " from cm_org_identities as coi"
         . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id and"
         . " not coi.deleted and not ccoil.deleted and"
-        . " coi.o is not null and coi.o != ''"
+        . " coi.o is not null and coi.o != '' and coi.status != '" . OrgIdentityStatusEnum::Removed . "'"
         . " where ccoil.co_person_id = :coPersonId)"
         . " FROM cm_co_people person"
         . " LEFT OUTER JOIN cm_names name"
@@ -203,19 +204,17 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         . ' FROM cm_co_people AS person'
         . ' INNER JOIN cm_co_org_identity_links AS link'
         . ' ON person.id = link.co_person_id'
+        . ' AND not link.deleted AND link.co_org_identity_link_id IS NULL'
+        . ' AND NOT person.deleted AND person.co_person_id IS NULL'
         . ' INNER JOIN cm_org_identities AS org'
         . ' ON link.org_identity_id = org.id'
+        . ' AND org.org_identity_id IS NULL AND NOT org.deleted'
         . ' INNER JOIN cm_certs AS cert'
         . ' ON org.id = cert.org_identity_id'
+        . ' AND cert.cert_id IS NULL AND NOT cert.deleted'
         . ' WHERE person.id = :coPersonId'
-        . ' AND NOT person.deleted'
-        . ' AND person.co_person_id IS NULL'
-        . ' AND NOT link.deleted'
-        . ' AND link.co_org_identity_link_id IS NULL'
-        . ' AND org.org_identity_id IS NULL'
-        . ' AND NOT org.deleted'
-        . ' AND cert.cert_id IS NULL'
-        . ' AND NOT cert.deleted';
+        . ' AND org.status != \'' . OrgIdentityStatusEnum::Removed . '\'';
+
 
     private $termsAgreementRevisionedQuery = "select cctac.id,"
         . " cctac.description,"
@@ -418,9 +417,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             $auth_event->recordAuthenticationEvent($state['Attributes'][$this->userIdAttribute][0]);
             // Get all the data from the COPerson and import them in the state
             $this->retrieveCOPersonData($state);
-
-        } catch (\Exception $e) {
-            $this->showError($e);
+        } catch (Error\Exception $e) {
+          $e->show();
         }
     }
 
@@ -1199,6 +1197,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         Logger::debug("[attrauthcomanage] retrieveCOPersonData: loginId=" . var_export($loginId, true));
 
         $state['Attributes'][$this->userIdAttribute] = [$loginId];
+        $state['rciamAttributes']['cuid'] = [$loginId];
         // XXX Create shortcuts for the basic USER data
         $state['UserOrgID'] = $orgId;
         $state['UserID'] = $loginId;
@@ -1447,7 +1446,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         }
 
         foreach($all_aups as $aup) {
-            $tmp_aup = [];
+            $tmp = [];
             $tmp['id'] = $aup['id'];
             $tmp['description'] = $aup['description'];
             $tmp['modified'] = $aup['modified'];
