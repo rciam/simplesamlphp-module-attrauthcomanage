@@ -130,7 +130,9 @@ class PetitionHandler
                                      . var_export($result, true));
             return $result;
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
+            throw new Error\Error(
+                ['UNHANDLEDEXCEPTION', 'Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true)]
+            );
         }
 
         return $result;
