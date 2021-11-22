@@ -13,6 +13,11 @@ use SimpleSAML\Module\attrauthcomanage\Enums\OrgIdentityStatusEnum as OrgIdentit
 class OrgIdentity
 {
     /**
+     * @var string
+     */
+    private $banner_class = 'info';
+
+    /**
      * @var
      */
     private $org_ident_list;
@@ -154,6 +159,8 @@ class OrgIdentity
      */
     public function isIdpIdentLogin(): bool
     {
+        $this->banner_class = 'warning';
+
         if (empty($this->org_ident_list) || empty($this->org_identity_identifier)) {
             return false;
         }
@@ -161,6 +168,8 @@ class OrgIdentity
             foreach ($identifierTypes as $ident) {
                 if ($ident['identifier'] === $this->org_identity_identifier
                     && $ident['login']) {
+                    // Reset the status of the banner
+                    $this->banner_class = 'info';
                     return true;
                 }
             }
@@ -184,6 +193,7 @@ class OrgIdentity
             foreach ($identifierTypes as $ident) {
                 if ($ident['identifier'] === $this->org_identity_identifier
                     && $ident['org_status'] == OrgIdentityStatusEnum::Removed) {
+                    $this->banner_class = 'error';
                     return true;
                 }
             }
@@ -213,11 +223,15 @@ class OrgIdentity
                         return false;
                     } elseif (empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
                         $valid_through = new \DateTime($ident['org_valid_through'], new \DateTimeZone('Etc/UTC'));
-
+                        if(!($valid_through >= $current_date)) {
+                            $this->banner_class = 'error';
+                        }
                         return !($valid_through >= $current_date);
                     } elseif (!empty($ident['org_valid_from']) && empty($ident['org_valid_through'])) {
                         $valid_from = new \DateTime($ident['org_valid_from'], new \DateTimeZone('Etc/UTC'));
-
+                        if(!($current_date >= $valid_from)) {
+                            $this->banner_class = 'error';
+                        }
                         return !($current_date >= $valid_from);
                     } elseif (!empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
                         $valid_from    = new \DateTime($ident['org_valid_from'], new \DateTimeZone('Etc/UTC'));
@@ -226,6 +240,7 @@ class OrgIdentity
                             && $current_date > $valid_from) {
                             return false;
                         } else {
+                            $this->banner_class = 'error';
                             return true;
                         }
                     }
@@ -234,5 +249,28 @@ class OrgIdentity
         }
 
         return false;
+    }
+
+    /**
+     * $params array $state
+     *
+     * @return array
+     */
+    public function getUserNotify($state, $status) {
+        $dictionary_list = [];
+        $dictionary_list['org_identity_'. $status . '_description'] = [
+            '%ORGID%' => $this->org_identity_identifier,
+            '%AUTHNAUTHORITY%' => end($state['saml:AuthenticatingAuthority'])
+        ];
+
+        return $dictionary_list;
+    }
+
+    /**
+     * @return string
+     */
+    public function getBannerClass(): string
+    {
+        return $this->banner_class;
     }
 }

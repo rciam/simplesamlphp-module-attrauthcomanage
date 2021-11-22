@@ -1,30 +1,42 @@
 {
-    "yes": {
-        "en": "Resend Verfication Email"
-    },
-    "no": {
-        "en": "Abort Login"
-    },
-    "title": {
-        "en": "Please verify your email address by clicking the link in the email we sent you"
-    },
-    "msg_title": {
-        "en": "<b>This is your current status:</b>"
+    "account_pending_confirmation": {
+        "en": "Account in Pending Email Confirmation Status"
     },
     "default_status": {
         "en": "Action Required"
     },
-    "account_pending_confirmation": {
-        "en": "Account in Pending Email Confirmation Status"
-    },
     "invitation_restored": {
         "en": "Invitation has been restored."
+    },
+    "msg_title": {
+        "en": "<b>This is your current status:</b>"
+    },
+    "no": {
+        "en": "Abort Login"
+    },
+    "org_identity_expired_banner": {
+        "en": "Organization Identity Expired"
+    },
+    "org_identity_expired_description": {
+        "en": "The identifier <b>- %ORGID% -</b> is not a valid authenticator. The subscription from <b>%AUTHNAUTHORITY%</b> has Expired.<br>Please contact <a href=\"mailto:faai@grnet.gr\">our support</a> and make sure to include the error message above."
+    },
+    "org_identity_nologin_banner": {
+        "en": "Organization Identity is not login enabled"
+    },
+    "org_identity_nologin_description": {
+        "en": "The identifier <b>- %ORGID% -</b> is not a valid authenticator. Please contact <a href=\"mailto:faai@grnet.gr\">our support</a> and make sure to include the error message above."
+    },
+    "org_identity_removed_banner": {
+        "en": "Organization Identity Removed"
+    },
+    "org_identity_removed_description": {
+        "en": "The identifier <b>- %ORGID% -</b> is not a valid authenticator. The subscription from <b>%AUTHNAUTHORITY%</b> has been Removed.<br>Please contact <a href=\"mailto:faai@grnet.gr\">our support</a> and make sure to include the error message above."
     },
     "petition_info": {
         "en": "The identifier <cite><b>%ORGIDENT%</b></cite> is in Email Pending Confirmation Status.&nbspPlease check your Mail <cite><b>%MAIL%</b></cite> Inbox or Spam for further information.&nbsp"
     },
-    "petition_user_notify": {
-        "en": "<p class=\"petition-user-notify\">We have sent an email with a confirmation link to your email address <cite><b>%MAIL%</b></cite>. In order to complete the sign-up process, please click the confirmation link. If you do not find the email in your Inbox, please check your Spam or Junk folder for an email from \"RCIAM Notifications\". If you do find the email in these folders, mark the email as \"safe\" or \"not spam\" to ensure that you receive any future notifications about your RCIAM ID.</p><p>You can also click the <strong>\"Resend Verfication Email\"</strong> button below to have another email sent to you."
+    "petition_invalidate_msg": {
+        "en": "<p><i class=\"fa fa-exclamation-triangle\" aria-hidden=\"true\"></i>This action will invalidate any previous confirmation links.</p>"
     },
     "petition_token_expired": {
         "en": "<div class=\"invite-expire\">Email confirmation token EXPIRED <b>&nbsp%DATE%</b>&nbspago</div>"
@@ -32,7 +44,13 @@
     "petition_token_expires": {
         "en": "<div class=\"invite-expire\">Email confirmation token EXPIRES in <b>&nbsp%DATE%</b></div>"
     },
-    "petition_invalidate_msg": {
-        "en": "<p><i class=\"fa fa-exclamation-triangle\" aria-hidden=\"true\"></i>This action will invalidate any previous confirmation links.</p>"
+    "petition_user_notify": {
+        "en": "<p class=\"petition-user-notify\">We have sent an email with a confirmation link to your email address <cite><b>%MAIL%</b></cite>. In order to complete the sign-up process, please click the confirmation link. If you do not find the email in your Inbox, please check your Spam or Junk folder for an email from \"RCIAM Notifications\". If you do find the email in these folders, mark the email as \"safe\" or \"not spam\" to ensure that you receive any future notifications about your RCIAM ID.</p><p>You can also click the <strong>\"Resend Verfication Email\"</strong> button below to have another email sent to you."
+    },
+    "resend_confirmation_email": {
+        "en": "Please verify your email address by clicking the link in the email we sent you"
+    },
+    "yes": {
+        "en": "Resend Verfication Email"
     }
 }

@@ -349,6 +349,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                         $pt_noty = [
                             'level' => $petition_handler->getBannerClass(),
                             'description' => $petition_handler->getUserNotify(),
+                            'title' => 'resend_confirmation_email',
                             //'status' => 'account_pending_confirmation', // This is a dictionary key
                             'icon' => 'email.gif',
                             'yes_btn_show' => true,
@@ -400,11 +401,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             // Get all the data from the COPerson and import them in the state
             $this->retrieveCOPersonData($state);
         } catch (Error\Error $e) {
-            if(method_exists($e, 'show')) {
-                $e->show();
-            } else {
-                $this->showError($e);
-            }
+            $e->show();
         }
     }
 
@@ -1062,25 +1059,36 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         }
         // XXX Check if the identifier is an authenticator
         if (!$org_identity->isIdpIdentLogin()) {
-            // Normally, this should not happen
-            $err_msg = 'The identifier <b>- ' . $orgId . ' -</b><br>is not present in your account or is not a valid authenticator.<br>Please contact support for further assistance.';
-            $this->showError($err_msg);
+            // Redirect to User notification
+            $pt_noty = [
+                'level' => $org_identity->getBannerClass(),
+                'description' => $org_identity->getUserNotify($state, 'nologin'),
+                'status' => 'org_identity_nologin_banner', // This is a dictionary key
+                'yes_btn_show' => false,
+            ];
+            $this->showNoty($pt_noty, $state);
         }
         // XXX Check if the identifier is valid or has expired
         if ($org_identity->isIdpIdentExpired()) {
-            // Normally, this should not happen
-            $err_msg = "The identifier <b>- " . $orgId . " -</b> is not a valid authenticator.";
-            $err_msg .= "<br>The subscription from <b>" . end($state['saml:AuthenticatingAuthority']) . "</b> expired.";
-            $err_msg .= "<br>Please contact support for further assistance.";
-            $this->showError($err_msg);
+            // Redirect to User notification
+            $pt_noty = [
+                'level' => $org_identity->getBannerClass(),
+                'description' => $org_identity->getUserNotify($state, 'expired'),
+                'status' => 'org_identity_expired_banner', // This is a dictionary key
+                'yes_btn_show' => false,
+            ];
+            $this->showNoty($pt_noty, $state);
         }
 
         if ($org_identity->isIdpRemoved()) {
-              // Normally, this should not happen
-              $err_msg = "The identifier <b>- " . $orgId . " -</b> is not a valid authenticator.";
-              $err_msg .= "<br>The subscription from <b>" . end($state['saml:AuthenticatingAuthority']) . "</b> has been Removed.";
-              $err_msg .= "<br>Please contact support for further assistance.";
-              $this->showError($err_msg);
+            // Redirect to User notification
+            $pt_noty = [
+                'level' => $org_identity->getBannerClass(),
+                'description' => $org_identity->getUserNotify($state, 'removed'),
+                'status' => 'org_identity_removed_banner', // This is a dictionary key
+                'yes_btn_show' => false,
+            ];
+            $this->showNoty($pt_noty, $state);
         }
 
         $loginId = $this->getCoPersonIdentifier($basicInfo['id'], $this->coUserIdType);
