@@ -317,14 +317,22 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             }
 
 
-
             if (empty($basicInfo['id'])                                                   // User is NOT present in the Registry OR
                 || empty($basicInfo['status'])                                            // User has no status in the Registry OR
                 || ($basicInfo['status']    !== StatusEnum::Active                        // (User is NOT ACTIVE in the Registry AND
                     && $basicInfo['status'] !== StatusEnum::GracePeriod)) {               // User is NOT in GRACE PERIOD in the Registry)
                 // XXX User is Suspended
                 if ($basicInfo['status'] === StatusEnum::Suspended) {                     // User is SUSPENDED
-                    $this->showError('attrauthcomanage:attrauthcomanage:exception_SUSPENDED_USER');
+                    // Redirect to User notification
+                    $pt_noty = [
+                        'level' => 'error',
+                        'description' => ['user_suspended' => [
+                            '%ORGID%' => $orgId,
+                        ]],
+                        'status' => 'user_suspended_title', // This is a dictionary key
+                        'yes_btn_show' => false,
+                    ];
+                    $this->showNoty($pt_noty, $state);
                 }
                 // XXX Petition in Pending Confirmation
                 if ($basicInfo['status'] === StatusEnum::PendingConfirmation) {           // User is PENDING CONFIRMATION
