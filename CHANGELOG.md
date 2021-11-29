@@ -4,12 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [v2.3.1] - 2021-11-29
 
 ### Fixed
 
 - Do not construct the `organization` attribute for a Removed OrgIdentity
-- Fixed error handling on database related error
+- Fixed error handling on unhandled excpetions such as database related errors
 
 ## [v2.3.0] - 2021-11-15
 
