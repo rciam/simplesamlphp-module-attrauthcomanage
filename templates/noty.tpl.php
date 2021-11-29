@@ -69,7 +69,9 @@ $this->includeAtTemplateBase('includes/header.php');
         <?php if(!empty($this->data['noty']['icon'])): ?>
         <img class="gif-box" src="resources/icons/<?= $this->data['noty']['icon'] ?>">
         <?php endif; ?>
-        <p><?= $this->t('{attrauthcomanage:noty:title}') ?></p>
+        <?php if(!empty($this->data['noty']['title'])) : ?>
+        <p><?= $this->t('{attrauthcomanage:noty:' . $this->data['noty']['title'] . '}') ?></p>
+        <?php endif; ?>
     </h3>
     <?php if(!is_null($noty_status)): ?>
         <div id="noty-info-bar" class="<?= $noty_level ?>"><?= $noty_status; ?></div>
@@ -87,8 +89,7 @@ $this->includeAtTemplateBase('includes/header.php');
     </div>
 </p>
 <!--  Yes/Confirm Action -->
-<?php if(!empty($this->data['yesTarget'])
-    && $yes_button_show): ?>
+<?php if(!empty($this->data['yesTarget']) && $yes_button_show): ?>
     <form style="display: inline; margin: 0px; margin-right: 0.5em; padding: 0px"
           onclick="javascript:form_ajax(this)"
           onsubmit="event.preventDefault();return false;"
