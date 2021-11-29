@@ -141,6 +141,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         . ' and not ident.deleted'
         . ' and ident.identifier_id is null';
 
+    // If the OrgIdentity is of status Removed we will not construct the organization attribute
     private $profileQuery = "SELECT string_agg(DISTINCT name.given, ',') AS given,"
         . " string_agg(DISTINCT name.family, ',') AS family,"
         . " string_agg(DISTINCT mail.id::text || ':' || mail.mail || ':' || mail.verified::text, ',')   AS mail,"
@@ -150,6 +151,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id and"
         . " not coi.deleted and not ccoil.deleted and"
         . " coi.o is not null and coi.o != '' and"
+        . " coi.status != '" . OrgIdentityStatusEnum::Removed . "' and"
         . " coi.affiliation is not null and coi.affiliation != ''"
         . " where ccoil.co_person_id = :coPersonId),"
         . " (select string_agg(coi.o, ',') as organization"
@@ -178,26 +180,6 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         . " AND name.primary_name = true"
         . " GROUP BY person.id;";
 
-    private $orgIdIdentQuery = "select ident.type,"
-        . " ident.identifier,"
-        . " ident.login,"
-        . " ident.org_identity_id,"
-        . " coi.valid_from as org_valid_from,"
-        . " coi.valid_through as org_valid_through"
-        . " from cm_identifiers as ident"
-        . " inner join cm_org_identities coi on ident.org_identity_id = coi.id"
-        . " and not ident.deleted"
-        . " and ident.identifier_id is null"
-        . " and not coi.deleted and coi.org_identity_id is null"
-        . " inner join cm_co_org_identity_links ccoil on coi.id = ccoil.org_identity_id"
-        . " and not ccoil.deleted"
-        . " and ccoil.co_org_identity_link_id is null"
-        . " inner join cm_co_people ccp on ccoil.co_person_id = ccp.id"
-        . " and not ccp.deleted"
-        . " and ccp.co_person_id is null"
-        . " where ident.type in (:coOrgIdType)"
-        . ":isLogin" // XXX This is a placeholder for the entire line"
-        . " and ccp.id = :coPersonId";
 
     private $certQuery = 'SELECT'
         . ' DISTINCT(cert.subject)'
@@ -335,14 +317,22 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             }
 
 
-
             if (empty($basicInfo['id'])                                                   // User is NOT present in the Registry OR
                 || empty($basicInfo['status'])                                            // User has no status in the Registry OR
                 || ($basicInfo['status']    !== StatusEnum::Active                        // (User is NOT ACTIVE in the Registry AND
                     && $basicInfo['status'] !== StatusEnum::GracePeriod)) {               // User is NOT in GRACE PERIOD in the Registry)
                 // XXX User is Suspended
                 if ($basicInfo['status'] === StatusEnum::Suspended) {                     // User is SUSPENDED
-                    $this->showError('attrauthcomanage:attrauthcomanage:exception_SUSPENDED_USER');
+                    // Redirect to User notification
+                    $pt_noty = [
+                        'level' => 'error',
+                        'description' => ['user_suspended' => [
+                            '%ORGID%' => $orgId,
+                        ]],
+                        'status' => 'user_suspended_title', // This is a dictionary key
+                        'yes_btn_show' => false,
+                    ];
+                    $this->showNoty($pt_noty, $state);
                 }
                 // XXX Petition in Pending Confirmation
                 if ($basicInfo['status'] === StatusEnum::PendingConfirmation) {           // User is PENDING CONFIRMATION
@@ -367,6 +357,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                         $pt_noty = [
                             'level' => $petition_handler->getBannerClass(),
                             'description' => $petition_handler->getUserNotify(),
+                            'title' => 'resend_confirmation_email',
                             //'status' => 'account_pending_confirmation', // This is a dictionary key
                             'icon' => 'email.gif',
                             'yes_btn_show' => true,
@@ -417,8 +408,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             $auth_event->recordAuthenticationEvent($state['Attributes'][$this->userIdAttribute][0]);
             // Get all the data from the COPerson and import them in the state
             $this->retrieveCOPersonData($state);
-        } catch (Error\Exception $e) {
-          $e->show();
+        } catch (Error\Error $e) {
+            $e->show();
         }
     }
 
@@ -459,7 +450,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                return $result;
             }
         } else {
-            throw new Error\Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+            throw new Error\Error(
+                ['UNHANDLEDEXCEPTION', 'Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true)]
+            );
         }
 
         return null;
@@ -491,126 +484,12 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                return $result['identifier'];
             }
         } else {
-            throw new Error\Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
+            throw new Error\Error(
+                ['UNHANDLEDEXCEPTION', 'Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true)]
+            );
         }
 
         return null;
-    }
-
-    /**
-     * Fetch all the Identifiers linked to OrgIdentities. Define whether these identifiers are authenticators or not
-     *
-     * @param   string  $personId   The CO Person ID
-     * @param   array   $orgIdentTypeList
-     * @param   bool    $isLogin   , true, false or null are allowed
-     *
-     * @return array|null Return an array of identifiers, column headers [ident.type, ident.identifier, ident.login, ident.org_identity_id]
-     * @throws Exception
-     */
-    private function getOrgIdentifiers($personId, $orgIdentTypeList, $isLogin=null)
-    {
-        Logger::debug('[attrauthcomanage] getOrgIdentifiers: personId=' . var_export($personId, true));
-
-        $db = Database::getInstance();
-        $this->orgIdIdentQuery = str_replace(':coOrgIdType',
-                                              "'" . implode("','", $orgIdentTypeList) . "'",
-                                              $this->orgIdIdentQuery);
-        if(is_null($isLogin)) {
-            $isLoginConditionStr = '';
-        } else {
-            $isLoginCondition = ($isLogin) ? 'true' : 'false';
-            $isLoginConditionStr = ' and ident.login=' . $isLoginCondition;
-        }
-
-        $this->orgIdIdentQuery = str_replace(':isLogin',
-                                              $isLoginConditionStr,
-                                              $this->orgIdIdentQuery);
-        $queryParams = [
-          'coPersonId' => [$personId, PDO::PARAM_INT],
-        ];
-        $stmt = $db->read($this->orgIdIdentQuery, $queryParams);
-
-        if ($stmt->execute()) {
-            if ($result = $stmt->fetchall(PDO::FETCH_GROUP|PDO::FETCH_ASSOC)) {
-                Logger::debug("[attrauthcomanage] getOrgIdentifiers: result="
-                                         . var_export($result, true));
-                return $result;
-            }
-        } else {
-            throw new Exception('Failed to communicate with COmanage Registry: '.var_export($db->getLastError(), true));
-        }
-        return null;
-    }
-
-    /**
-     * Check whether the identifier fetched from the IdP is available in the list of my Identifiers
-     * and marked as a login identifier
-     *
-     * @param string $idpIdent Identifier provided by the Identity Provider
-     * @param array $identsList List of OrgIdentity Identifiers
-     *
-     * @return bool
-     */
-    private function isIdpIdentLogin($idpIdent, $identsList)
-    {
-        if( empty($identsList) || empty($idpIdent)) {
-            return false;
-        }
-        foreach ($identsList as $identifierTypes) {
-            foreach($identifierTypes as $ident) {
-                if( $ident['identifier'] === $idpIdent
-                  && $ident['login']) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Check whether the identifier fetched from the IdP has expired
-     * If valid from and valid through fields are empty we assume that the Identifier will never expire
-     *
-     * @param   string  $idpIdent    Identifier provided by the Identity Provider
-     * @param   array   $identsList  List of OrgIdentity Identifiers
-     *
-     * @return bool|null true(is expired), false(is not expired), null if either of the parameters are empty
-     * @throws Exception
-     * @todo make timezone configuration
-     */
-    private function isIdpIdentExpired($idpIdent, $identsList)
-    {
-        if( empty($identsList) || empty($idpIdent)) {
-            return null;
-        }
-        foreach ($identsList as $identifierTypes) {
-            foreach($identifierTypes as $ident) {
-                if( $ident['identifier'] === $idpIdent) {
-                    Logger::debug("[attrauthcomanage] isIdpIdentExpired: org_valid_through = " . var_export($ident['org_valid_through'], true));
-                    Logger::debug("[attrauthcomanage] isIdpIdentExpired: org_valid_from = " . var_export($ident['org_valid_from'], true));
-                    $current_date = new \DateTime('now', new \DateTimeZone('Etc/UTC'));
-                    if (empty($ident['org_valid_from']) && empty($ident['org_valid_through'])) {
-                        return false;
-                    } elseif (empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
-                        $valid_through = new \DateTime($ident['org_valid_through'], new \DateTimeZone('Etc/UTC'));
-                        return !($valid_through >= $current_date);
-                    } elseif (!empty($ident['org_valid_from']) && empty($ident['org_valid_through'])) {
-                        $valid_from = new \DateTime($ident['org_valid_from'], new \DateTimeZone('Etc/UTC'));
-                        return !($current_date >= $valid_from);
-                    } elseif (!empty($ident['org_valid_from']) && !empty($ident['org_valid_through'])) {
-                        $valid_from = new \DateTime($ident['org_valid_from'], new \DateTimeZone('Etc/UTC'));
-                        $valid_through = new \DateTime($ident['org_valid_through'], new \DateTimeZone('Etc/UTC'));
-                        if ($valid_through >= $current_date
-                            && $current_date > $valid_from) {
-                            return false;
-                        } else {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        return false;
     }
 
 
@@ -648,7 +527,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 . var_export($result, true));
             return $result;
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
+            throw new Error\Error(
+                ['UNHANDLEDEXCEPTION', 'Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true)]
+            );
         }
 
         return null;
@@ -763,7 +644,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 . var_export($result, true));
             return $result;
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
+            throw new Error\Error(
+                ['UNHANDLEDEXCEPTION', 'Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true)]
+            );
         }
 
         return $result;
@@ -832,7 +715,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 . var_export($result, true)
             );
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
+            throw new Error\Error(
+                ['UNHANDLEDEXCEPTION', 'Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true)]
+            );
         }
 
         return $result;
@@ -1173,24 +1058,45 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         // XXX Scenario: The user ID module creates an Identifier. We must check that this identifier is enlisted
         // XXX in the list of available OrgIdentities of the CO Person and is a valid authenticator.
         // XXX Upon success we return the Identifier of the COPerson
-        $orgIdentifiers = $this->getOrgIdentifiers($basicInfo['id'], $this->coOrgIdType, true);
+        $org_identity = new User\OrgIdentity($orgId);
+        $orgIdentifiers = $org_identity->getLoginOrgIdentifiers($basicInfo['id'], $this->coOrgIdType);
+
         Logger::debug('[attrauthcomanage] process: orgIdentifiers=' . var_export($orgIdentifiers, true));
         if (!empty($orgIdentifiers)) {
             $state['orgIndentifiersList'] = $orgIdentifiers;
         }
         // XXX Check if the identifier is an authenticator
-        if (!$this->isIdpIdentLogin($orgId, $orgIdentifiers)) {
-            // Normally, this should not happen
-            $err_msg = 'The identifier <b>- ' . $orgId . ' -</b><br>is not present in your account or is not a valid authenticator.<br>Please contact support for further assistance.';
-            throw new Exception($err_msg);
+        if (!$org_identity->isIdpIdentLogin()) {
+            // Redirect to User notification
+            $pt_noty = [
+                'level' => $org_identity->getBannerClass(),
+                'description' => $org_identity->getUserNotify($state, 'nologin'),
+                'status' => 'org_identity_nologin_banner', // This is a dictionary key
+                'yes_btn_show' => false,
+            ];
+            $this->showNoty($pt_noty, $state);
         }
         // XXX Check if the identifier is valid or has expired
-        if ($this->isIdpIdentExpired($orgId, $orgIdentifiers)) {
-            // Normally, this should not happen
-            $err_msg = "The identifier <b>- " . $orgId . " -</b> is not a valid authenticator.";
-            $err_msg .= "<br>The subscription from <b>" . end($state['saml:AuthenticatingAuthority']) . "</b> expired.";
-            $err_msg .= "<br>Please contact support for further assistance.";
-            throw new Exception($err_msg);
+        if ($org_identity->isIdpIdentExpired()) {
+            // Redirect to User notification
+            $pt_noty = [
+                'level' => $org_identity->getBannerClass(),
+                'description' => $org_identity->getUserNotify($state, 'expired'),
+                'status' => 'org_identity_expired_banner', // This is a dictionary key
+                'yes_btn_show' => false,
+            ];
+            $this->showNoty($pt_noty, $state);
+        }
+
+        if ($org_identity->isIdpRemoved()) {
+            // Redirect to User notification
+            $pt_noty = [
+                'level' => $org_identity->getBannerClass(),
+                'description' => $org_identity->getUserNotify($state, 'removed'),
+                'status' => 'org_identity_removed_banner', // This is a dictionary key
+                'yes_btn_show' => false,
+            ];
+            $this->showNoty($pt_noty, $state);
         }
 
         $loginId = $this->getCoPersonIdentifier($basicInfo['id'], $this->coUserIdType);
@@ -1634,7 +1540,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 . var_export($result, true));
             return $result;
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
+            throw new Error\Error(
+                ['UNHANDLEDEXCEPTION', 'Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true)]
+            );
         }
 
         return $result;
@@ -1675,7 +1583,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 . var_export($result, true));
             return $result;
         } else {
-            throw new Exception('Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true));
+            throw new Error\Error(
+                ['UNHANDLEDEXCEPTION', 'Failed to communicate with COmanage Registry: ' . var_export($db->getLastError(), true)]
+            );
         }
 
         return $result;
