@@ -109,7 +109,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
     private $coGroupMemberships = [];
     private $comanage_api_username = null;
     private $comanage_api_password = null;
-
+    private $orgIdentity = null;
     private $basicInfoQuery = 'select'
         . ' person.id,'
         . ' person.status,'
@@ -287,6 +287,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         // TODO: Move this out configuration check. Make this as part of voRoles multitenacy support
         $voRolesObject = new \ArrayObject($config['voRoles']);
         $this->voRolesDef = $voRolesObject->getArrayCopy();
+        $this->orgIdentity = new User\OrgIdentity();
     }
 
     public function process(&$state)
@@ -406,6 +407,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             // Record the login
             $auth_event = new User\AuthenticationEventHandler();
             $auth_event->recordAuthenticationEvent($state['Attributes'][$this->userIdAttribute][0]);
+            $this->orgIdentity->setOrgIdentityIdentifier($orgId);
+            $job_data = $state['Attributes'];
+            $this->orgIdentity->insertJobToComanage($this->coId, $orgId, $job_data);
             // Get all the data from the COPerson and import them in the state
             $this->retrieveCOPersonData($state);
         } catch (Error\Error $e) {
@@ -1058,41 +1062,41 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         // XXX Scenario: The user ID module creates an Identifier. We must check that this identifier is enlisted
         // XXX in the list of available OrgIdentities of the CO Person and is a valid authenticator.
         // XXX Upon success we return the Identifier of the COPerson
-        $org_identity = new User\OrgIdentity($orgId);
-        $orgIdentifiers = $org_identity->getLoginOrgIdentifiers($basicInfo['id'], $this->coOrgIdType);
+        $this->orgIdentity->setOrgIdentityIdentifier($orgId);
+        $orgIdentifiers = $this->orgIdentity->getLoginOrgIdentifiers($basicInfo['id'], $this->coOrgIdType);
 
         Logger::debug('[attrauthcomanage] process: orgIdentifiers=' . var_export($orgIdentifiers, true));
         if (!empty($orgIdentifiers)) {
             $state['orgIndentifiersList'] = $orgIdentifiers;
         }
         // XXX Check if the identifier is an authenticator
-        if (!$org_identity->isIdpIdentLogin()) {
+        if (!$this->orgIdentity->isIdpIdentLogin()) {
             // Redirect to User notification
             $pt_noty = [
-                'level' => $org_identity->getBannerClass(),
-                'description' => $org_identity->getUserNotify($state, 'nologin'),
+                'level' => $this->orgIdentity->getBannerClass(),
+                'description' => $this->orgIdentity->getUserNotify($state, 'nologin'),
                 'status' => 'org_identity_nologin_banner', // This is a dictionary key
                 'yes_btn_show' => false,
             ];
             $this->showNoty($pt_noty, $state);
         }
         // XXX Check if the identifier is valid or has expired
-        if ($org_identity->isIdpIdentExpired()) {
+        if ($this->orgIdentity->isIdpIdentExpired()) {
             // Redirect to User notification
             $pt_noty = [
-                'level' => $org_identity->getBannerClass(),
-                'description' => $org_identity->getUserNotify($state, 'expired'),
+                'level' => $this->orgIdentity->getBannerClass(),
+                'description' => $this->orgIdentity->getUserNotify($state, 'expired'),
                 'status' => 'org_identity_expired_banner', // This is a dictionary key
                 'yes_btn_show' => false,
             ];
             $this->showNoty($pt_noty, $state);
         }
 
-        if ($org_identity->isIdpRemoved()) {
+        if ($this->orgIdentity->isIdpRemoved()) {
             // Redirect to User notification
             $pt_noty = [
-                'level' => $org_identity->getBannerClass(),
-                'description' => $org_identity->getUserNotify($state, 'removed'),
+                'level' => $this->orgIdentity->getBannerClass(),
+                'description' => $this->orgIdentity->getUserNotify($state, 'removed'),
                 'status' => 'org_identity_removed_banner', // This is a dictionary key
                 'yes_btn_show' => false,
             ];
