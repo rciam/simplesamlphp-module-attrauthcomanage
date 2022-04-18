@@ -56,7 +56,7 @@ class OrgIdentity
      *
      * @param $org_identity_identifier
      */
-    public function __construct($org_identity_identifier = NULL)
+    public function __construct($org_identity_identifier = null)
     {
         $this->org_identity_identifier = $org_identity_identifier;
     }
@@ -293,16 +293,19 @@ class OrgIdentity
   public function insertJobToComanage($coId, $identifier, $job_data): bool
   {
     $data = array();
-    $data['givenName'] = $job_data['givenName'];
-    $data['sn'] = $job_data['sn'];
+    $data['givenName'] = !empty($job_data['givenName']) ? $job_data['givenName'] : null;
+    $data['sn'] = !empty($job_data['sn']) ? $job_data['sn'] : null;
     if (!empty($job_data['voPersonVerifiedEmail'])) {
       $data['mail'] = $job_data['voPersonVerifiedEmail'];
       $data['verified_email'] = true;
     }
     else {
-      $data['mail'] = $job_data['mail'];
+      $data['mail'] = !empty($job_data['mail']) ? $job_data['mail'] : null;
     }
-
+    if(!empty($job_data['voPersonCertificateDN'])){
+      $data['voPersonCertificateDN'] = array(implode(";", $job_data['voPersonCertificateDN']));
+      $data['voPersonCertificateIssuerDN'] = array(implode(";", $job_data['voPersonCertificateIssuerDN']));
+    }
     $fields = ['co_id', 'job_type', 'job_params', 'job_data', 'failure_summary', 'tries', 'created'];
 
     $date = $this->getDateNow();
