@@ -1367,6 +1367,21 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 $tmp['vo'] = [];
                 $tmp['vo']['id'] = $aup['cou_id'];
                 $cou_id = $aup['cou_id'];
+                // first we should check if user is still member of the COU related to accepted AUP
+                // as he/she may has been expired
+                $is_member = array_filter(
+                    $co_memberships,
+                    static function($group) use ($cou_id) {
+                        if ((int)$group['cou_id'] === (int)$cou_id) {
+                           return true;
+                        }
+                    }
+                );
+                // if is not still member then ignore this aup
+                if(empty($is_member)){
+                    continue;
+                }
+
                 $cou = array_filter(
                     $co_memberships,
                     static function($group) use ($cou_id) {
