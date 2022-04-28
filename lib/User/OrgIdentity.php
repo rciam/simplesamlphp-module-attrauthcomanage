@@ -56,11 +56,18 @@ class OrgIdentity
      *
      * @param $org_identity_identifier
      */
-    public function __construct($org_identity_identifier)
+    public function __construct($org_identity_identifier = null)
     {
         $this->org_identity_identifier = $org_identity_identifier;
     }
 
+  /**
+   * @param $org_identity_identifier
+   */
+    public function setOrgIdentityIdentifier($org_identity_identifier)
+    {
+      $this->org_identity_identifier = $org_identity_identifier;
+    }
     /**
      * Fetch all the Login enabled Identifiers linked to OrgIdentities. Define whether these identifiers are authenticators or not
      *
@@ -273,4 +280,96 @@ class OrgIdentity
     {
         return $this->banner_class;
     }
+
+
+  /**
+   * @param $coId
+   * @param $identifier
+   * @param $job_data
+   *
+   * @return bool
+   * @throws Exception
+   */
+  public function insertJobToComanage($coId, $identifier, $job_data): bool
+  {
+    $data = array();
+    $data['givenName'] = !empty($job_data['givenName']) ? $job_data['givenName'] : null;
+    $data['sn'] = !empty($job_data['sn']) ? $job_data['sn'] : null;
+    if (!empty($job_data['voPersonVerifiedEmail'])) {
+      $data['mail'] = $job_data['voPersonVerifiedEmail'];
+      $data['verified_email'] = true;
+    }
+    else {
+      $data['mail'] = !empty($job_data['mail']) ? $job_data['mail'] : null;
+    }
+    if(!empty($job_data['voPersonCertificateDN'])){
+      $data['voPersonCertificateDN'] = array(implode(";", $job_data['voPersonCertificateDN']));
+      $data['voPersonCertificateIssuerDN'] = array(implode(";", $job_data['voPersonCertificateIssuerDN']));
+    }
+    $fields = ['co_id', 'job_type', 'job_params', 'job_data', 'failure_summary', 'tries', 'created'];
+
+    $date = $this->getDateNow();
+    // Construct a table with the values to insert
+    $values = [
+      $coId,                  // CO id
+      'SN',                   // Job Type
+      'OrgIdentity ' . $identifier,   // Job Params
+      json_encode($data, JSON_UNESCAPED_SLASHES), // Data To Store
+      '',                        // Failure Summary
+      0,                        // Attempts
+      $date,                    // Created
+    ];
+
+    // Create my query parameters array
+    $queryParams = array_combine($fields, $values);
+
+    // Construct the query placeholders
+    $placeholders = array_map(static function ($field) {
+      return ':' . $field;
+    }, $fields);
+
+    // XXX We are using a new event type which is currently not in the database.
+    $insertJobquery = "INSERT INTO cm_job_schedulers (" . implode(', ', $fields) . ")" .
+      " VALUES (" . implode(', ', $placeholders) . ")";
+
+    Logger::debug(
+      '[attrauthcomanage] insertJobToComanage: query template: ' . var_export(
+        $insertJobquery,
+        true
+      )
+    );
+
+    Logger::debug(
+      '[attrauthcomanage] insertJobToComanage: query params: ' . var_export(
+        $queryParams,
+        true
+      )
+    );
+
+    $db = Database::getInstance();
+    if (!$db->write($insertJobquery, $queryParams)) {
+      Logger::error(
+        '[attrauthcomanage] insertJobToComanage: Failed to communicate with COmanage Registry: ' . var_export(
+          $db->getLastError(),
+          true
+        )
+      );
+
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * @return string
+   * @throws Exception
+   */
+  private function getDateNow(): string
+  {
+    // Get the current date in UTC
+    $dateTime = new \DateTime('now', new \DateTimeZone('Etc/UTC'));
+
+    return $dateTime->format('Y-m-d H:i:s');
+  }
 }
