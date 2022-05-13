@@ -24,6 +24,9 @@
  *            'communityIdps' => [
  *               'https://example1.com/idp',
  *            ],
+ *            'communityIdpTags' => [
+ *                'community',
+ *            ],
  *            'voRoles' => [
  *               'member',
  *               'faculty',
@@ -70,6 +73,7 @@ use SimpleSAML\Module;
 use SimpleSAML\XHTML\Template;
 use SimpleSAML\Utils\HTTP;
 use SimpleSAML\Database;
+use SimpleSAML\Metadata\MetaDataStorageHandler;
 use SimpleSAML\Module\attrauthcomanage\Attributes;
 use SimpleSAML\Module\attrauthcomanage\Enrollment;
 use SimpleSAML\Module\attrauthcomanage\User;
@@ -99,6 +103,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
     private $retrieveAUP = false;
     private $registryUrls = [];
     private $communityIdps = [];
+    private $communityIdpTags = ['community'];
     private $mergeEntitlements = false;
     private $voGroupPrefix = [];
     // If true, this filter will also generate entitlements using the
@@ -382,7 +387,9 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 // Check if community signup is required
                 if (
                     !empty($state['saml:AuthenticatingAuthority'])
-                    && in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)
+                    && (in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)
+                        ||  in_array(end($this->getIdPTags($this->getIdPMetadata($state))), $this->communityIdpTags, true)
+                       )
                 ) {
                     // Redirect to community signup flow with all
                     // attributes available including affiliation
@@ -1730,6 +1737,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 'blacklist' => 'is_array',
                 'voWhitelist' => 'is_array',
                 'communityIdps' => 'is_array',
+                'communityIdpTags' => 'is_array',
                 'voGroupPrefix' => 'is_array',
                 'coUserIdType' => 'is_string',
                 'userIdAttribute' => 'is_string',
@@ -1779,4 +1787,24 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         HTTP::redirectTrustedURL($url, ['StateId' => $id]);
     }
 
+    private function getIdPMetadata($state)
+    {
+        // If the module is active on a bridge,
+        // $request['saml:sp:IdP'] will contain an entry id for the remote IdP.
+        if (!empty($state['saml:sp:IdP'])) {
+            $idpEntityId = $state['saml:sp:IdP'];
+            return MetaDataStorageHandler::getMetadataHandler()->getMetaData($idpEntityId, 'saml20-idp-remote');
+        } else {
+            return $state['Source'];
+        }
+    }
+
+    private function getIdPTags($idpMetadata)
+    {
+        if (!empty($idpMetadata['tags'])) {
+            return $idpMetadata['tags'];
+        }
+
+        return [];
+    }
 }

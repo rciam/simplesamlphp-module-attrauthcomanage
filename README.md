@@ -75,6 +75,7 @@ The following authproc filter configuration options are supported:
     * `blacklist`: An array of strings that contains the SPs that the module will skip to process. Defaults to `array()`.
     * `voWhitelist`: An array of strings that contains VOs (COUs) for which the module will generate entitlements. Defaults to `null`. If `null`, the voWhitelist check is skipped.
     * `communityIdps`: An array of strings that contains the Entity Ids of trusted communities. Defaults to `array()`.
+    * `communityIdpTags`: An array of strings that contains tags, indicating that every Idp having at least one of them is considered as community. Defaults to `array('community')`.
     * `urnLegacy`: A boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
     * `certificate`: A boolean value for controlling whether to fetch `Certificates` from User's Profile. Defaults to `false`.
     * `retrieveSshKeys`: A boolean value for controlling whether to retrieve SSH keys from User's Profile. Defaults to `false`.
@@ -102,6 +103,9 @@ Note: In case you need to change the format of the entitlements you need to modi
             ],
             'communityIdps' => [
                'https://example1.com/idp',
+            ],
+            'communityIdpTags' => [
+               'community',
             ],
             'voRoles' => [
                 'member',
