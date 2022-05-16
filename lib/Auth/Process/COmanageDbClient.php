@@ -388,7 +388,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 if (
                     !empty($state['saml:AuthenticatingAuthority'])
                     && (in_array(end($state['saml:AuthenticatingAuthority']), $this->communityIdps, true)
-                        ||  in_array(end($this->getIdPTags($this->getIdPMetadata($state))), $this->communityIdpTags, true)
+                        || !empty(array_intersect($this->getIdPTags($this->getIdPMetadata($state)), $this->communityIdpTags))
                        )
                 ) {
                     // Redirect to community signup flow with all
