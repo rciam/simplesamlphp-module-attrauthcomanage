@@ -77,6 +77,7 @@ The following authproc filter configuration options are supported:
     * `communityIdps`: An array of strings that contains the Entity Ids of trusted communities. Defaults to `array()`.
     * `communityIdpTags`: An array of strings that contains tags, indicating that every Idp having at least one of them is considered as community. Defaults to `array('community')`.
     * `urnLegacy`: A boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
+    * `noRoleEntitlements`: A boolean value for controlling whether to generate `eduPersonEntitlement` URN values without role attribute. Defaults to `false`.
     * `certificate`: A boolean value for controlling whether to fetch `Certificates` from User's Profile. Defaults to `false`.
     * `retrieveSshKeys`: A boolean value for controlling whether to retrieve SSH keys from User's Profile. Defaults to `false`.
     * `mergeEntitlements`: A boolean to indicate whether the redundant `eduPersonEntitlement` will be removed from the state. Defaults to `false`.

@@ -38,6 +38,7 @@
  *            'urnAuthority' => 'example.eu',
  *            'retrieveAUP' => true,
  *            'mergeEntitlements' => false,
+ *            'noRoleEntitlements' => false,
  *            'certificate' => false,
  *            'retrieveSshKeys' => true,
  *            'registryUrls' => [
@@ -109,6 +110,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
     // If true, this filter will also generate entitlements using the
     // legacy URN format
     private $urnLegacy = false;
+    // If true, this filter will also generate entitlements without the role attribute
+    private $noRoleEntitlements = false;
     private $voRoles = [];
     private $voRolesDef = [];
     private $coGroupMemberships = [];
@@ -850,7 +853,15 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                   . $group . ':' . $role       // role
                   . "@"                        // VO delimiter
                   . urlencode($vo_name);       // VO
-          } // Depricated syntax
+        } // Deprecated syntax
+
+        if ($this->noRoleEntitlements) {
+            $state['Attributes']['eduPersonEntitlement'][] = 
+                  $this->urnNamespace // URN namespace
+                  . ':' . 'group:' 
+                  . urlencode($vo_name) // VO
+                  . '#'. $this->urnAuthority; 
+        }
       }
     }
 
@@ -1742,6 +1753,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 'coUserIdType' => 'is_string',
                 'userIdAttribute' => 'is_string',
                 'urnLegacy' => 'is_bool',
+                'noRoleEntitlements' => 'is_bool',
                 'certificate' => 'is_bool',
                 'mergeEntitlements' => 'is_bool',
                 'coTermsId' => 'is_int',
