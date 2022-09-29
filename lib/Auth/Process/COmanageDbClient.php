@@ -810,10 +810,11 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
      * @param string $group_name
      * @param array $memberEntitlements
      * @param integer $cou_id
+     * @param array $cou_tree_structure
      * @todo Remove old style entitlements
      * @todo Remove $group_name variable
      */
-    private function couEntitlementAssemble($personRoles, &$state, $vo_name, $group_name = "", &$memberEntitlements = null, $cou_id = null)
+    private function couEntitlementAssemble($personRoles, &$state, $vo_name, $group_name = "", &$memberEntitlements = null, $cou_id = null, $cou_tree_structure = array())
     {
       foreach ($personRoles as $key => $role) {
         // We need this to filter the cou_id or any other irrelevant information
@@ -825,16 +826,18 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
           continue;
         }
         if (!empty($role) && is_array($role) && count($role) > 0) {
-          $this->couEntitlementAssemble($role, $state, $vo_name, $key, $memberEntitlements, $personRoles['cou_id']);
+          $this->couEntitlementAssemble($role, $state, $vo_name, $key, $memberEntitlements, $personRoles['cou_id'], $cou_tree_structure);
           continue;
         }
         $group = !empty($group_name) ? ":" . $group_name : "";
+
         $entitlement =
           $this->urnNamespace                 // URN namespace
           . ":group:"                         // group literal
           . urlencode($vo_name)               // VO
           . $group . ":role=" . $role         // role
           . "#" . $this->urnAuthority;        // AA FQDN
+
         if (is_array($memberEntitlements)
             && !is_string($key)
             && $role === 'member') {
@@ -844,7 +847,19 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             $memberEntitlements['admins'][$cou_id] = $entitlement;
           }
         }
+
         $state['Attributes']['eduPersonEntitlement'][] = $entitlement;
+
+        if(!empty($personRoles['cou_id'])
+          && !empty($cou_tree_structure[ $personRoles['cou_id'] ])) {
+          $state['Attributes']['eduPersonEntitlement'][] =
+            $this->urnNamespace                                       // URN namespace
+            . ":group:"                                               // group literal
+            . $cou_tree_structure[ $personRoles['cou_id'] ]['path']   // Nested VO
+            . $group . ":role=" . $role                               // role
+            . "#" . $this->urnAuthority;                              // AA FQDN
+        }
+
         // TODO: remove in the near future
         if ($this->urnLegacy) {
             $state['Attributes']['eduPersonEntitlement'][] =
@@ -1312,7 +1327,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             // todo: Move upper to voRoles Create function
 
             Logger::debug("[attrauthcomanage] retrieveCOPersonData voRoles[{$voName}]=" . var_export($vo_roles, true));
-            $this->couEntitlementAssemble($vo_roles, $state, $voName, "", $members_entitlements);
+            $this->couEntitlementAssemble($vo_roles, $state, $voName, "", $members_entitlements, null, $nested_cous);
             // XXX Remove the ones already done
             unset($cou_memberships[$idx]);
         } // foreach cou
@@ -1589,7 +1604,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
      * Column Names [id, description, modified, cou_id, url, revision, last_aggrement_aupid_and_time(id::agreement_time)]
      * id(cm_co_terms_and_conditions):                              ID in the database of the Terms and Conditions entry
      * description(cm_co_terms_and_conditions):                     Short description of the T&C entry
-     * modified(cm_co_terms_and_conditions):                        The date of latest update
+     * modified(cm_co_terms_and_conditions):                        The date of the latest update
      * cou_id(cm_co_terms_and_conditions):                          null if not related to a COU an integer of the COU id otherwise
      * url(cm_co_terms_and_conditions):                             the url of the Terms&Condition document
      * revision(cm_co_terms_and_conditions):                        Indicates the number of times this T&C was revised
