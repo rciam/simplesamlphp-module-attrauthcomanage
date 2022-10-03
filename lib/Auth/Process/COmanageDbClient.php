@@ -852,6 +852,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
 
         if(!empty($personRoles['cou_id'])
           && !empty($cou_tree_structure[ $personRoles['cou_id'] ])) {
+          $this->EntitlementsToRemove[] = $entitlement;
           $state['Attributes']['eduPersonEntitlement'][] =
             $this->urnNamespace                                       // URN namespace
             . ":group:"                                               // group literal
@@ -1072,6 +1073,15 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 }
             }
         }
+
+        // XXX Remove single level entitlements marked to be removed
+        foreach($this->EntitlementsToRemove as $ent) {
+          foreach($state['Attributes']['eduPersonEntitlement'] as $idx => $entitlement) {
+            if ($ent == $entitlement) {
+              unset($state['Attributes']['eduPersonEntitlement'][$idx]);
+            }
+          }
+        }
     }
 
     /**
@@ -1243,6 +1253,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
 
         // Define the array that will hold the member entitlements
         $members_entitlements = [];
+        // Temp list of entitlements to remove
+        $this->EntitlementsToRemove = array();
         // Iterate over the COUs and construct the entitlements
         foreach ($cou_memberships as $idx => $cou) {
             if (empty($cou['group_name'])) {
