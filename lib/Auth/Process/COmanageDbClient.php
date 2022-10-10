@@ -114,6 +114,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
     private $noRoleEntitlements = false;
     private $voRoles = [];
     private $voRolesDef = [];
+    private $voRolesInter = [];
     private $coGroupMemberships = [];
     private $comanage_api_username = null;
     private $comanage_api_password = null;
@@ -851,7 +852,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
         $state['Attributes']['eduPersonEntitlement'][] = $entitlement;
 
         if(!empty($personRoles['cou_id'])
-          && !empty($cou_tree_structure[ $personRoles['cou_id'] ])) {
+           && ( !in_array($role, $this->voRolesDef) || in_array($role, $this->voRolesInter) )
+           && !empty($cou_tree_structure[ $personRoles['cou_id'] ])) {
           $this->EntitlementsToRemove[] = $entitlement;
           $state['Attributes']['eduPersonEntitlement'][] =
             $this->urnNamespace                                       // URN namespace
@@ -1311,6 +1313,8 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             );
             // Lowercase all roles
             $vo_roles = array_map('strtolower', $vo_roles);
+            // Find the intersection of default and VO roles
+            $this->voRolesInter = array_intersect($vo_roles, $this->voRoles);
             // Merge the default roles with the ones constructed from the COUs
             $vo_roles = array_unique(array_merge($vo_roles, $this->voRoles));
             // Get the admins group if exists
