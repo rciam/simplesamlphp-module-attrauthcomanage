@@ -573,6 +573,22 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
             if (!empty($attributes['family'])) {
                 $state['Attributes']['sn'] = [$attributes['family']];
             }
+            if (!empty($attributes['organization'])) {
+                // XXX Organization is used as a fallback if the eduPersonScopedAffiliation is missing
+                $o = explode(',', $attributes['organization']);
+                // XXX Remove schac: prefix
+                $o = array_filter(
+                    $o,
+                    static function ($value) {
+                        return strpos($value, 'schac:') === false;
+                    }
+                );
+                // Remove all empty entries
+                $o = array_filter($o);
+                if (!empty($o)) {
+                    $state['Attributes']['o'] = $o;
+                }
+            }
             if (!empty($attributes['mail'])) {
                 // Sort the mails by their row unique id(lowest to highest
                 $mails = explode(',', $attributes['mail']);
@@ -606,12 +622,28 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 }
             }
             if (!empty($attributes['edupersonscopedaffiliation'])) {
-                $state['Attributes']['eduPersonScopedAffiliation'] = explode(
+                $ePSA = explode(
                     ',',
                     $attributes['edupersonscopedaffiliation']
                 );
                 // XXX Remove any duplicate edupersonscopedaffiliation
-                $state['Attributes']['eduPersonScopedAffiliation'] = array_filter(array_unique($state['Attributes']['eduPersonScopedAffiliation']));
+                $ePSA = array_filter(array_unique($ePSA));
+                // XXX Remove all non schac containing entries
+                $ePSA = array_filter(
+                    $ePSA,
+                    static function ($value) {
+                        return (strpos($value, "schac:") !== false);
+                    }
+                );
+                // XXX Remove schac: prefix
+                $ePSA = array_map(
+                    static function ($value) {
+                        return str_replace('schac:', '', $value);
+                    }, $ePSA
+                );
+                if(!empty($ePSA)) {
+                  $state['Attributes']['eduPersonScopedAffiliation'] = $ePSA;
+                }
             }
             if (!empty($attributes['identifier'])) {
                 $identifiers = explode(',', $attributes['identifier']);
