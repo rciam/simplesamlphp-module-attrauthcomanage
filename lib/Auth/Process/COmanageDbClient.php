@@ -1174,11 +1174,11 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 if(empty($cert['subject'])) {
                     continue;
                 }
-                if(!array_key_exists('distinguishedName', $state['Attributes'])) {
-                    $state['Attributes']['distinguishedName'] = [];
+                if(!array_key_exists($this->certificateDnAttribute, $state['Attributes'])) {
+                    $state['Attributes'][$this->certificateDnAttribute] = [];
                 }
-                if(!in_array($cert['subject'], $state['Attributes']['distinguishedName'], true)) {
-                    $state['Attributes']['distinguishedName'][] = $cert['subject'];
+                if(!in_array($cert['subject'], $state['Attributes'][$this->certificateDnAttribute], true)) {
+                    $state['Attributes'][$this->certificateDnAttribute][] = $cert['subject'];
                 }
             }
         } else {
