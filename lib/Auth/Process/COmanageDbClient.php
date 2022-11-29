@@ -17,6 +17,7 @@
  *            'coOrgIdType' => ['epuid'],
  *            'coUserIdType' => 'epuid',
  *            'userIdAttribute' => 'eduPersonPrincipalName',
+ *            'certificateDnAttribute' => 'voPersonCertificateDN',
  *            'voWhitelist' => [
  *               'vo.example.com',
  *               'vo.example2.com',
@@ -92,6 +93,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
     private $coOrgIdType = ['epuid'];
 
     private $userIdAttribute = 'eduPersonPrincipalName';
+    private $certificateDnAttribute = 'voPersonCertificateDN';
 
     // List of VO names that should be included in entitlements.
     private $voWhitelist = null;
@@ -312,6 +314,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 $this->showError(
                     "attrauthcomanage:attrauthcomanage:exception_USERIDATTRIBUTE_NOTAVAILABLE");
             }
+
             // XXX finalize the configurations now that we have the final CO Id value
             $this->voGroupPrefix = !empty($this->voGroupPrefix[$this->coId])
                                    ? $this->voGroupPrefix[$this->coId]
@@ -1783,6 +1786,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 'voGroupPrefix' => 'is_array',
                 'coUserIdType' => 'is_string',
                 'userIdAttribute' => 'is_string',
+                'certificateDnAttribute' => 'is_string',
                 'urnLegacy' => 'is_bool',
                 'noRoleEntitlements' => 'is_bool',
                 'certificate' => 'is_bool',

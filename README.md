@@ -72,6 +72,7 @@ The following authproc filter configuration options are supported:
     * `coOrgIdType`: An array containing the Identifier types under the user's Organizational Identities. Defaults to `array('epuid')`.
     * `retrieveAUP`: A boolean value for controlling whether to retrieve Terms & Conditions/Acceptable Use Policy (AUP) information from the COmanage Registry. When `true`, the retrieved AUP information is stored in the state - `$state['rciamAttributes']['aup']`. Defaults to `false`.
     * `userIdAttribute`: A string containing the name of the attribute whose value to use for querying the COmanage Registry. Defaults to `"eduPersonPrincipalName"`.
+    * `certificateDnAttribute`: A string containing the name of the attribute for Certificate Subject which will be set up at state. Defaults to `"voPersonCertificateDN"`.
     * `blacklist`: An array of strings that contains the SPs that the module will skip to process. Defaults to `array()`.
     * `voWhitelist`: An array of strings that contains VOs (COUs) for which the module will generate entitlements. Defaults to `null`. If `null`, the voWhitelist check is skipped.
     * `communityIdps`: An array of strings that contains the Entity Ids of trusted communities. Defaults to `array()`.
