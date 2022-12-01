@@ -79,6 +79,7 @@ The following authproc filter configuration options are supported:
     * `urnLegacy`: A boolean value for controlling whether to generate `eduPersonEntitlement` URN values using the legacy syntax. Defaults to `false`.
     * `noRoleEntitlements`: A boolean value for controlling whether to generate `eduPersonEntitlement` URN values without role attribute. Defaults to `false`.
     * `certificate`: A boolean value for controlling whether to fetch `Certificates` from User's Profile. Defaults to `false`.
+    * `certificateDnAttribute`: A string containing the name of the attribute that will contain the Certificate Subject DN when `certificate` is set to `true`. Defaults to `"voPersonCertificateDN"`.
     * `retrieveSshKeys`: A boolean value for controlling whether to retrieve SSH keys from User's Profile. Defaults to `false`.
     * `mergeEntitlements`: A boolean to indicate whether the redundant `eduPersonEntitlement` will be removed from the state. Defaults to `false`.
     * `attrMap`: An array of key,value pairs. These pairs constitute COmanage to SimpleSamlPHP attribute mappings. Currently ONLY Identifier attributes are supported. Defaults to `null`.
