@@ -332,56 +332,7 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
 
             if (empty($basicInfo['id'])                                                   // User is NOT present in the Registry OR
                 || empty($basicInfo['status'])                                            // User has no status in the Registry OR
-                || ($basicInfo['status']    !== StatusEnum::Active                        // (User is NOT ACTIVE in the Registry AND
-                    && $basicInfo['status'] !== StatusEnum::GracePeriod)) {               // User is NOT in GRACE PERIOD in the Registry)
-                // XXX User is Suspended
-                if ($basicInfo['status'] === StatusEnum::Suspended) {                     // User is SUSPENDED
-                    // Redirect to User notification
-                    $pt_noty = [
-                        'level' => 'error',
-                        'description' => ['user_suspended' => [
-                            '%ORGID%' => $orgId,
-                        ]],
-                        'status' => 'user_suspended_title', // This is a dictionary key
-                        'yes_btn_show' => false,
-                    ];
-                    $this->showNoty($pt_noty, $state);
-                }
-                // XXX Petition in Pending Confirmation
-                if ($basicInfo['status'] === StatusEnum::PendingConfirmation) {           // User is PENDING CONFIRMATION
-                    // Get Petition Id
-                    $petition_cfg = [
-                        'enrollee_co_person_id'   => (int)$basicInfo['id'],
-                        'petition_status'         => $basicInfo['status'],
-                        'orgIdentifier'           => $state['Attributes'][$this->userIdAttribute][0],
-                        'co_id'                   => $this->coId,
-                    ];
-                    $petition_handler = new Enrollment\PetitionHandler($petition_cfg);
-                    $petition = $petition_handler->getPetitionFromPersonIdPetStatus();
-                    $endpoint = str_replace('%id%',
-                                            $petition[0]['petition_id'],
-                                            EndpointCmgEnum::ConfirmationEmailResend);
-                    $state['rciamAttributes']['comanage_api_user'] = [
-                      'username' => $this->comanage_api_username,
-                      'password' => $this->comanage_api_password,
-                    ];
-                    if(!empty($petition)) {
-                        // Get petition id and redirect to email view
-                        $pt_noty = [
-                            'level' => $petition_handler->getBannerClass(),
-                            'description' => $petition_handler->getUserNotify(),
-                            'title' => 'resend_confirmation_email',
-                            //'status' => 'account_pending_confirmation', // This is a dictionary key
-                            'icon' => 'email.gif',
-                            'yes_btn_show' => true,
-                            'form_fields' => [
-                                'send_endpoint' => $endpoint,
-                                'mail' => $petition[0]['mail'],
-                            ],
-                        ];
-                        $this->showNoty($pt_noty, $state);
-                    }
-                }
+               ) {
 
                 // XXX User is eligible to proceed to service
                 $state['UserID'] = $orgId;
@@ -418,7 +369,72 @@ class COmanageDbClient extends \SimpleSAML\Auth\ProcessingFilter
                 }
                 $this->_redirect($basicInfo, $state, $params);
             }
-            // Record the login
+
+          // XXX User is Suspended
+          if ($basicInfo['status'] === StatusEnum::Suspended) {                     // User is SUSPENDED
+            // Redirect to User notification
+            $pt_noty = [
+              'level' => 'error',
+              'description' => ['user_suspended' => [
+                '%ORGID%' => $orgId,
+              ]],
+              'status' => 'user_suspended_title', // This is a dictionary key
+              'yes_btn_show' => false,
+            ];
+            $this->showNoty($pt_noty, $state);
+          }
+          // XXX Petition in Pending Confirmation
+          if ($basicInfo['status'] === StatusEnum::PendingConfirmation) {           // User is PENDING CONFIRMATION
+            // Get Petition Id
+            $petition_cfg = [
+              'enrollee_co_person_id'   => (int)$basicInfo['id'],
+              'petition_status'         => $basicInfo['status'],
+              'orgIdentifier'           => $state['Attributes'][$this->userIdAttribute][0],
+              'co_id'                   => $this->coId,
+            ];
+            $petition_handler = new Enrollment\PetitionHandler($petition_cfg);
+            $petition = $petition_handler->getPetitionFromPersonIdPetStatus();
+            $endpoint = str_replace('%id%',
+                                    $petition[0]['petition_id'],
+                                    EndpointCmgEnum::ConfirmationEmailResend);
+            $state['rciamAttributes']['comanage_api_user'] = [
+              'username' => $this->comanage_api_username,
+              'password' => $this->comanage_api_password,
+            ];
+            if(!empty($petition)) {
+              // Get petition id and redirect to email view
+              $pt_noty = [
+                'level' => $petition_handler->getBannerClass(),
+                'description' => $petition_handler->getUserNotify(),
+                'title' => 'resend_confirmation_email',
+                //'status' => 'account_pending_confirmation', // This is a dictionary key
+                'icon' => 'email.gif',
+                'yes_btn_show' => true,
+                'form_fields' => [
+                  'send_endpoint' => $endpoint,
+                  'mail' => $petition[0]['mail'],
+                ],
+              ];
+              $this->showNoty($pt_noty, $state);
+            }
+          }
+
+
+          if($basicInfo['status'] !== StatusEnum::Active
+            && $basicInfo['status'] !== StatusEnum::GracePeriod) {
+            // Redirect to User notification
+            $pt_noty = [
+              'level' => 'error',
+              'description' => ['user_error' => [
+                '%ORGID%' => $orgId,
+              ]],
+              'status' => 'user_error_title', // This is a dictionary key
+              'yes_btn_show' => false,
+            ];
+            $this->showNoty($pt_noty, $state);
+          }
+
+          // Record the login
             $auth_event = new User\AuthenticationEventHandler();
             $auth_event->recordAuthenticationEvent($state['Attributes'][$this->userIdAttribute][0]);
             $this->orgIdentity->setOrgIdentityIdentifier($orgId);
