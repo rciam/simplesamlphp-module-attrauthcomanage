@@ -51,10 +51,16 @@
         "en": "Please verify your email address by clicking the link in the email we sent you"
     },
     "user_suspended": {
-        "en": "Your identity (%ORGID%) has been suspended. Please contact our <a href=\"mailto:support@rciam.example.org\">support</a> and make sure to include the error message above"
+        "en": "There is a problem with your identifier (%ORGID%). Please get in touch with our support team at <a href=\"mailto:support@rciam.example.org\">support</a> and include the error message shown above. We apologise for any inconvenience caused and will help you resolve this issue as quickly as possible."
     },
     "user_suspended_title": {
         "en": "Identity suspended"
+    },
+    "user_error": {
+        "en": "Your identity (%ORGID%) is in error state. Please contact our <a href=\"mailto:support@rciam.example.org\">support</a> and make sure to include the error message above"
+    },
+    "user_error_title": {
+        "en": "Sorry, we were not able to log you in"
     },
     "yes": {
         "en": "Resend Verification Email"
