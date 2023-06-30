@@ -304,7 +304,9 @@ class OrgIdentity
     }
     if(!empty($job_data['voPersonCertificateDN'])){
       $data['voPersonCertificateDN'] = array(implode(";", $job_data['voPersonCertificateDN']));
-      $data['voPersonCertificateIssuerDN'] = array(implode(";", $job_data['voPersonCertificateIssuerDN']));
+      if(!empty($job_data['voPersonCertificateIssuerDN'])){
+        $data['voPersonCertificateIssuerDN'] = array(implode(";", $job_data['voPersonCertificateIssuerDN']));
+      }
     }
     $fields = ['co_id', 'job_type', 'job_params', 'job_data', 'failure_summary', 'tries', 'created'];
 
